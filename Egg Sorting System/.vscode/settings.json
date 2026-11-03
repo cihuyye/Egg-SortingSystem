@@ -1,0 +1,19 @@
+{
+    "python.defaultInterpreterPath": "C:\\Users\\lenovo\\AppData\\Local\\Python\\bin\\python.exe",
+    "python.analysis.extraPaths": [
+        "C:\\Users\\lenovo\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages",
+        "d:\\Egg Sorting System"
+    ],
+    "python.analysis.typeCheckingMode": "off",
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportMissingImports": "none",
+        "reportUnknownMemberType": "none",
+        "reportUnknownVariableType": "none",
+        "reportGeneralTypeIssues": "none",
+        "reportOptionalMemberAccess": "none",
+        "reportOptionalSubscript": "none",
+        "reportUnusedImport": "none",
+        "reportIndexIssues": "none",
+        "reportArgumentType": "none"
+    }
+}

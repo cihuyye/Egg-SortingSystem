@@ -1,0 +1,19 @@
+{
+    "pythonVersion": "3.14",
+    "pythonPlatform": "Windows",
+    "extraPaths": [
+        "C:\\Users\\lenovo\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages",
+        "d:\\Egg Sorting System"
+    ],
+    "typeCheckingMode": "off",
+    "reportMissingImports": "none",
+    "reportMissingModuleSource": "none",
+    "reportUnknownMemberType": "none",
+    "reportUnknownVariableType": "none",
+    "reportGeneralTypeIssues": "none",
+    "reportOptionalMemberAccess": "none",
+    "reportOptionalSubscript": "none",
+    "reportUnusedImport": "none",
+    "reportIndexIssues": "none",
+    "reportArgumentType": "none"
+}

@@ -1,0 +1,7 @@
+path: D:/Egg Dataset/Egg Dataset
+train: train/images
+val: valid/images
+test: test/images
+
+nc: 3
+names: ['cracked', 'dirt', 'good']
