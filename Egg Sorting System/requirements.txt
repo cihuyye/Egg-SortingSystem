@@ -1,0 +1,21 @@
+# ==============================================================================
+# DEPENDENCIES SISTEM SORTIR MUTU TELUR (FLASK + YOLOV8 + OPENCV + GEMINI LLM)
+# ==============================================================================
+
+# Web Framework & API Server
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# Computer Vision & Deep Learning
+ultralytics>=8.0.0
+torch>=2.0.0
+torchvision>=0.15.0
+opencv-python>=4.8.0
+pillow>=10.0.0
+numpy>=1.24.0
+
+# Large Language Model (LLM) Integration - Google Gemini Only
+google-generativeai>=0.8.0
+
+# HTTP Requests & Utilities
+requests>=2.31.0
