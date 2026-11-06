@@ -11,7 +11,7 @@ def run_candling_dashboard(camera_index: int = 0) -> None:
     1. Otomatis mengenali orientasi telur (Tidur Horizontal Kiri/Kanan, atau Berdiri).
     2. Mendeteksi kutub tumpul (blunt end) tempat kantung hawa berada secara adaptif.
     3. Filter bintik pigmen alami & noise kamera gelap (anti false-positive).
-    4. Mengeluarkan Vector Fitur SVM & Status SNI 3926:2023 stabil tiap detik.
+    4. Mengeluarkan Vektor Fitur & Status SNI 3926:2023 stabil tiap detik.
     """
     cap = cv2.VideoCapture(camera_index)
     if not cap.isOpened():
@@ -51,12 +51,12 @@ def run_candling_dashboard(camera_index: int = 0) -> None:
             current_orientation = str(res.get("orientation_detected", "-"))
             current_reason = str(res.get("reason", ""))
 
-            # Vector SVM: [Kedalaman Kantung (cm), Rasio Cacat Gelap, Kecerahan]
+            # Vektor Candling: [Kedalaman Kantung (cm), Rasio Cacat Gelap, Kecerahan]
             current_vector = [round(air_depth, 2), round(dark_ratio, 4), round(brightness, 1)]
             
             timestamp: str = time.strftime("%H:%M:%S")
             print(f"[{timestamp}] Orientasi: {current_orientation}")
-            print(f"           Vector SVM Candling -> {current_vector}")
+            print(f"           Vektor Candling -> {current_vector}")
             print(f"           Grade SNI: {current_grade} | {current_reason}\n")
 
         # Overlay Informasi Dashboard di Layar
@@ -67,7 +67,7 @@ def run_candling_dashboard(camera_index: int = 0) -> None:
 
         # Teks Info
         color_grade = (0, 255, 0) if "Mutu I" in current_grade else ((0, 255, 255) if "Mutu II" in current_grade else (0, 0, 255))
-        cv2.putText(visual_frame, f"Vector SVM: {current_vector} (Depth_cm, Dark_ratio, Brightness)", (15, 25),
+        cv2.putText(visual_frame, f"Vektor Candling: {current_vector} (Depth_cm, Dark_ratio, Brightness)", (15, 25),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
         cv2.putText(visual_frame, f"Orientasi : {current_orientation}", (15, 50),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
