@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EggSort AI - Inspeksi Cangkang 360° & Grading Telur SNI</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="container">
+  <!-- Header Bar -->
+  <header>
+    <div class="logo-area">
+      <div class="logo-badge">🥚</div>
+      <div class="title-group">
+        <h1>EggSort AI - Inspeksi Cangkang 360° & Grading Telur</h1>
+        <p>Integrasi Multi-Angle YOLOv8 + OpenCV + Google Gemini (gemini-3.8-flash) Berdasarkan SNI 3926:2023</p>
+      </div>
+    </div>
+
+    <div class="api-status-bar">
+      <div id="statusDot" class="status-dot"></div>
+      <span id="statusText" class="status-text">Memeriksa API...</span>
+      <input type="text" id="apiUrlInput" class="api-url-input" value="http://127.0.0.1:8000" title="Alamat URL Flask API">
+    </div>
+  </header>
+
+  <!-- Main Grid Layout -->
+  <div class="grid-layout">
+    <!-- Left Column: Multi-Angle Upload & Gallery -->
+    <div class="card">
+      <div class="card-title">
+        <span>📸 Unggah Citra Cangkang Telur</span>
+        <span class="badge-count" id="badgeFileCount">0 Sudut Dipilih</span>
+      </div>
+
+      <!-- Drop Zone for Multiple Images -->
+      <div class="upload-zone" id="dropZone">
+        <div class="upload-icon">📂</div>
+        <div class="upload-prompt">Klik atau Tarik Foto Telur ke Sini</div>
+        <div class="upload-hint">
+          <strong>Mendukung Multi-Foto untuk 1 Telur:</strong><br>
+          Bisa pilih 1 foto atau beberapa sudut pandang (depan, belakang, samping) agar mencakup 360° cangkang.
+        </div>
+        <input type="file" id="fileInput" accept="image/*" multiple>
+      </div>
+
+      <!-- Angles Preview Gallery -->
+      <div class="angles-gallery-title">
+        <span>Pratinjau Sudut Cangkang Telur:</span>
+        <span id="clearFilesLink" style="color: #ef4444; cursor: pointer; display: none;">Hapus Semua</span>
+      </div>
+      
+      <div class="angles-list" id="anglesList">
+        <div style="grid-column: 1 / -1; text-align: center; color: #9ca3af; font-size: 12px; padding: 20px;">
+          Belum ada foto telur diunggah.<br>Pilih 1 atau beberapa foto untuk memulai.
+        </div>
+      </div>
+
+      <!-- Button Controls -->
+      <div class="btn-group">
+        <button id="btnPredict" class="btn btn-primary" disabled>
+          <span id="btnSpinner" style="display: none;" class="spinner"></span>
+          <span id="btnText">⚡ Analisis 360° & Tentukan Grade</span>
+        </button>
+        <button id="btnReset" class="btn btn-secondary">🔄 Reset</button>
+      </div>
+    </div>
+
+    <!-- Right Column: Results (Hero Card + 2 Inspection Modules) -->
+    <div>
+      <!-- Hero Final Grade Card -->
+      <div class="hero-grade-card" id="heroGradeCard">
+        <div class="grade-info-group">
+          <div class="sorting-badge" id="sortingActionBadge">🎯 Menunggu Analisis Telur</div>
+          <div class="grade-reason" id="gradeReasonText">Silakan masukkan foto sudut cangkang telur pada panel di samping lalu tekan tombol analisis.</div>
+          <div class="grade-subtext" id="gradeStandardRef">Acuan: SNI 3926:2023 (Tabel 1: Kerabang & Bentuk)</div>
+        </div>
+        <div id="gradeBadgeHuge" class="grade-badge-huge" style="display: none;">
+          MUTU I (GRADE A)
+        </div>
+      </div>
+
+      <!-- Dual Inspection Cards (YOLO 360 + OpenCV Geometry) -->
+      <div class="dual-inspection-grid">
+        <!-- Module 1: YOLOv8 360 Shell Inspection -->
+        <div class="module-card">
+          <div class="module-header">
+            <span>🔍</span> YOLOv8 Evaluasi Cangkang 360°
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Total Sudut Diperiksa</span>
+            <span class="stat-value" id="valTotalAngles">-</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Kesimpulan 360°</span>
+            <span class="stat-value" id="valYolo360Class">-</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Keyakinan (Confidence)</span>
+            <span class="stat-value" id="valYolo360Conf">-</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Catatan Cacat</span>
+            <span class="stat-value" id="valYolo360Notes" style="font-size: 12px; max-width: 200px;">-</span>
+          </div>
+        </div>
+
+        <!-- Module 2: OpenCV Geometry & Size -->
+        <div class="module-card">
+          <div class="module-header">
+            <span>📐</span> OpenCV Geometri & Fisik
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Dimensi (Panjang x Lebar)</span>
+            <span class="stat-value" id="valDimensions">-</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Indeks Bentuk (ESI)</span>
+            <span class="stat-value" id="valEsi">-</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Estimasi Bobot</span>
+            <span class="stat-value" id="valWeight">-</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Kategori Ukuran SNI</span>
+            <span class="stat-value" id="valSizeCat">-</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Technical JSON Inspection Accordion -->
+      <details>
+        <summary>🛠️ Lihat Respons Mentah API (JSON Response)</summary>
+        <pre class="json-code" id="rawJsonResponse">// Respons dari endpoint POST /api/v1/predict akan tampil di sini secara lengkap.</pre>
+      </details>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================================== -->
+<!-- FLOATING CHATBOT WIDGET (POPUP DENGAN ICON PESAN)                              -->
+<!-- ============================================================================== -->
+
+<!-- Floating Chat Trigger Button (Icon Pesan di Pojok Kanan Bawah) -->
+<button id="chatFloatingBtn" class="chat-floating-btn" aria-label="Buka Chatbot Auditor Mutu" title="Tanya Auditor Mutu AI">
+  <span class="chat-floating-icon" id="chatFloatingIcon">💬</span>
+  <span class="chat-badge-dot" id="chatBadgeDot"></span>
+</button>
+
+<!-- Floating Popup Chat Modal -->
+<div id="chatPopupWidget" class="chat-popup-widget">
+  <!-- Popup Header -->
+  <div class="chat-header">
+    <div class="chat-header-title">
+      <span class="chat-avatar-icon">🥚</span>
+      <div>
+        <div style="font-weight: 700; color: #1e293b; font-size: 13.5px;">Auditor Mutu AI</div>
+        <div class="chat-sub">Gemini 3.8 Flash • SNI 3926:2023</div>
+      </div>
+    </div>
+    <div class="chat-header-actions">
+      <span id="llmBadge" class="llm-badge gemini">Gemini 3.8 Flash</span>
+      <button id="btnSetApiKey" class="btn-icon-action" title="Setel Gemini API Key (AIzaSy...)">🔑</button>
+      <button id="btnClearChat" class="btn-icon-action" title="Bersihkan Percakapan">🧹</button>
+      <button id="btnCloseChat" class="btn-icon-action btn-close-popup" title="Tutup Chat">✕</button>
+    </div>
+  </div>
+
+  <!-- Messages Scroll Container -->
+  <div class="chat-messages-container" id="chatMessagesContainer">
+    <div class="chat-msg msg-assistant">
+      <div class="msg-avatar">🤖</div>
+      <div class="msg-body">
+        <div class="msg-sender">Auditor Mutu Telur (SNI 3926:2023)</div>
+        <div class="msg-text">
+          Halo! Saya adalah <strong>Auditor Mutu AI</strong> berbasis <strong>Google Gemini (gemini-3.8-flash)</strong>. 
+          <br><br>
+          Silakan unggah foto telur pada dashboard lalu tekan <strong>⚡ Analisis 360°</strong>. 
+          Anda dapat memberi prompt manual atau menanyakan alasan grade, keamanan konsumsi, atau ketentuan klausul SNI.
+          <br><br>
+          <em style="font-size: 12px; color: #64748b;">*Catatan: Prompt dibatasi secara ketat hanya untuk lingkup inspeksi mutu telur dan SNI 3926:2023. Topik di luar konteks akan diberikan peringatan.*</em>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Suggested Prompt Chips -->
+  <div class="chat-quick-chips" id="quickChipsContainer">
+    <button type="button" class="chip-btn" data-query="Kenapa telur ini mendapatkan grade tersebut?">🧐 Alasan Grade</button>
+    <button type="button" class="chip-btn" data-query="Apakah telur dengan kondisi ini aman untuk dikonsumsi?">🍳 Keamanan Konsumsi</button>
+    <button type="button" class="chip-btn" data-query="Apakah dimensi dan indeks bentuk (ESI) telur ini sesuai SNI?">📏 Kesesuaian ESI SNI</button>
+    <button type="button" class="chip-btn" data-query="Apa rekomendasi tindakan operasional untuk servo atau konveyor?">⚙️ Tindakan Konveyor</button>
+  </div>
+
+  <!-- Chat Input Form -->
+  <form class="chat-input-bar" id="chatForm">
+    <input 
+      type="text" 
+      id="chatInput" 
+      class="chat-input-field" 
+      placeholder="Ketik pertanyaan atau prompt manual untuk Auditor..."
+      autocomplete="off"
+    />
+    <button type="submit" id="btnSendChat" class="btn-send-chat" title="Kirim Pesan">
+      <span id="chatSendText">Kirim</span>
+      <span id="chatSendSpinner" class="spinner" style="display: none; width: 14px; height: 14px;"></span>
+    </button>
+  </form>
+</div>
+
+<!-- Notification Toast -->
+<div id="toast" class="toast">Notifikasi</div>
+
+<!-- Client Logic Script -->
+<script src="app.js"></script>
+</body>
+</html>
