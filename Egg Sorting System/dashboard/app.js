@@ -150,11 +150,11 @@ async function checkApiHealth() {
     if (res.ok) {
       const data = await res.json();
       statusDot.className = "status-dot online";
-      const llmInfo = data.llm_active 
-        ? ` • Gemini: Aktif (${data.llm_model || 'gemini-3.8-flash'})` 
+      const llmInfo = data.llm_active
+        ? ` • Gemini: Aktif (${data.llm_model || 'gemini-3.8-flash'})`
         : ' • Gemini: Offline Fallback';
       statusText.textContent = `API Terhubung (${data.device || 'Flask'}${llmInfo})`;
-      
+
       if (llmBadge) {
         if (data.llm_active) {
           llmBadge.textContent = data.llm_model || 'Gemini 3.8 Flash';
@@ -447,7 +447,7 @@ function displayResults(data) {
       ${formatMarkdown(rawLlmText)}
     `;
     appendChatMessage('assistant', reportHtml, true, 'Auditor Mutu Telur (SNI 3926:2023)');
-    
+
     chatHistory.push({
       role: 'assistant',
       content: rawLlmText

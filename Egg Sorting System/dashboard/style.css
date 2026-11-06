@@ -175,7 +175,8 @@ header {
   transition: all 0.2s ease;
 }
 
-.upload-zone:hover, .upload-zone.dragover {
+.upload-zone:hover,
+.upload-zone.dragover {
   background: #fef3c7;
   border-color: #d97706;
   transform: translateY(-2px);
@@ -308,7 +309,8 @@ header {
   object-fit: contain !important;
   display: block !important;
 }
-  font-size: 10px;
+
+font-size: 10px;
 }
 
 .btn-group {
@@ -381,7 +383,7 @@ header {
   font-weight: 900;
   letter-spacing: -0.5px;
   text-transform: uppercase;
-  box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -499,9 +501,20 @@ header {
   display: inline-block;
 }
 
-.pill-good { background: #d1fae5; color: #065f46; }
-.pill-dirt { background: #fef3c7; color: #92400e; }
-.pill-cracked { background: #fee2e2; color: #991b1b; }
+.pill-good {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.pill-dirt {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.pill-cracked {
+  background: #fee2e2;
+  color: #991b1b;
+}
 
 /* Technical JSON Details */
 details {
@@ -547,7 +560,7 @@ summary:hover {
   color: #ffffff;
   font-size: 13px;
   font-weight: 600;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
   transform: translateY(100px);
   opacity: 0;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
@@ -559,14 +572,22 @@ summary:hover {
   opacity: 1;
 }
 
-.toast.success { background: #059669; }
-.toast.error { background: #dc2626; }
-.toast.info { background: #2563eb; }
+.toast.success {
+  background: #059669;
+}
+
+.toast.error {
+  background: #dc2626;
+}
+
+.toast.info {
+  background: #2563eb;
+}
 
 .spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid rgba(255,255,255,0.4);
+  border: 2px solid rgba(255, 255, 255, 0.4);
   border-top-color: #ffffff;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -574,7 +595,9 @@ summary:hover {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* LLM Badge */
@@ -648,9 +671,20 @@ summary:hover {
 }
 
 @keyframes badgePulse {
-  0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
-  70% { transform: scale(1.1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
-  100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+  0% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+
+  70% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+  }
+
+  100% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
 }
 
 /* ==============================================================================
@@ -785,8 +819,15 @@ summary:hover {
 }
 
 @keyframes fadeInMsg {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .chat-msg.msg-assistant {
@@ -874,9 +915,21 @@ summary:hover {
 }
 
 @keyframes warningShake {
-  0%, 100% { transform: translateX(0); }
-  20%, 60% { transform: translateX(-5px); }
-  40%, 80% { transform: translateX(5px); }
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  20%,
+  60% {
+    transform: translateX(-5px);
+  }
+
+  40%,
+  80% {
+    transform: translateX(5px);
+  }
 }
 
 .msg-user .msg-text {
@@ -1009,13 +1062,31 @@ summary:hover {
   animation: typingBounce 1.4s infinite ease-in-out both;
 }
 
-.typing-dot:nth-child(1) { animation-delay: -0.32s; }
-.typing-dot:nth-child(2) { animation-delay: -0.16s; }
-.typing-dot:nth-child(3) { animation-delay: 0s; }
+.typing-dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0s;
+}
 
 @keyframes typingBounce {
-  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
-  40% { transform: scale(1.1); opacity: 1; }
+
+  0%,
+  80%,
+  100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+
+  40% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
 }
 
 .llm-loading-skeleton {
@@ -1034,8 +1105,13 @@ summary:hover {
 }
 
 @keyframes skeletonPulse {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 /* Mobile Responsive Adjustments for Popup Chat */
@@ -1060,6 +1136,3 @@ summary:hover {
     right: 18px;
   }
 }
-
-
-
