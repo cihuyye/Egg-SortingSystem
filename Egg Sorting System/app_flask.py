@@ -17,6 +17,7 @@ from flask import Flask, request, jsonify, send_from_directory, send_file
 from flask_cors import CORS
 from PIL import Image
 import numpy as np
+import cv2
 
 # Import YOLOv8 dengan fallback aman jika belum terinstall
 try:
@@ -157,6 +158,48 @@ def model_info():
     })
 
 
+def normalize_conveyor_input(img_rgb: np.ndarray, target_size: int = 640):
+    """
+    Normalisasi citra input (format RGB) agar cocok dengan domain data latih konveyor (dark box):
+    1. Jika latar belakang terang/studio (misal foto Google/kertas putih),
+       isolasi objek telur dan tempatkan pada latar hitam pekat konveyor.
+    2. Letterbox padding ke rasio persegi 1:1 (640x640) agar bentuk telur tidak terdistorsi.
+    3. Mengembalikan canvas RGB 640x640 beserta faktor skala dan offset untuk memetakan kembali
+       koordinat bounding box ke resolusi citra asli.
+    """
+    h, w = img_rgb.shape[:2]
+    gray = np.mean(img_rgb, axis=2)  # Grayscale tanpa konversi BGR/RGB
+    corners = [float(gray[0, 0]), float(gray[0, w - 1]),
+               float(gray[h - 1, 0]), float(gray[h - 1, w - 1])]
+
+    # Jika sudah 640x640 persegi dengan latar gelap, tidak perlu normalisasi
+    if h == target_size and w == target_size and np.mean(corners) < 30:
+        return img_rgb, 1.0, 0, 0
+
+    # Resize proporsional ke ~480px sisi terpanjang lalu letterbox di canvas 640x640
+    scale = 480.0 / max(h, w)
+    nh, nw = int(h * scale), int(w * scale)
+    resized = np.array(Image.fromarray(img_rgb).resize((nw, nh), Image.LANCZOS))
+
+    gray_res = np.mean(resized, axis=2)
+    corners_res = [float(gray_res[0, 0]), float(gray_res[0, nw - 1]),
+                   float(gray_res[nh - 1, 0]), float(gray_res[nh - 1, nw - 1])]
+
+    canvas = np.zeros((target_size, target_size, 3), dtype=np.uint8)
+    y_off = (target_size - nh) // 2
+    x_off = (target_size - nw) // 2
+
+    if np.mean(corners_res) > 150:  # Latar belakang studio/putih terdeteksi
+        egg_mask = (gray_res < 240).astype(np.uint8)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        egg_mask = cv2.morphologyEx(egg_mask, cv2.MORPH_CLOSE, kernel)
+        canvas[y_off:y_off + nh, x_off:x_off + nw][egg_mask > 0] = resized[egg_mask > 0]
+    else:
+        canvas[y_off:y_off + nh, x_off:x_off + nw] = resized
+
+    return canvas, scale, x_off, y_off
+
+
 # ==============================================================================
 # ROUTE PREDIKSI: PIPELINE UTAMA (YOLO + OPENCV + SNI + GEMINI LLM)
 # ==============================================================================
@@ -202,21 +245,32 @@ def predict():
             angle_max_conf = 1.0
 
             if model is not None:
-                preds = model.predict(pil_img, verbose=False)[0]
+                # Normalisasi latar belakang: konversi background terang/studio ke hitam konveyor
+                np_normalized, scale, x_off, y_off = normalize_conveyor_input(np_img)
+                pil_normalized = Image.fromarray(np_normalized)
+                preds = model.predict(pil_normalized, verbose=False)[0]
                 boxes = getattr(preds, "boxes", None)
 
                 if boxes is not None and len(boxes) > 0:
+                    h_orig, w_orig = np_img.shape[:2]
                     for box in boxes:
                         cls_id = int(box.cls[0].item())
                         conf = float(box.conf[0].item())
-                        xyxy = [round(float(coord), 2) for coord in box.xyxy[0].tolist()]
+                        x1, y1, x2, y2 = box.xyxy[0].tolist()
+
+                        # Petakan koordinat bounding box kembali ke dimensi citra asli
+                        x1_orig = round(max(0.0, min(float(w_orig), (x1 - x_off) / scale)), 2)
+                        y1_orig = round(max(0.0, min(float(h_orig), (y1 - y_off) / scale)), 2)
+                        x2_orig = round(max(0.0, min(float(w_orig), (x2 - x_off) / scale)), 2)
+                        y2_orig = round(max(0.0, min(float(h_orig), (y2 - y_off) / scale)), 2)
+
                         name = CLASS_NAMES[cls_id] if cls_id < len(CLASS_NAMES) else "unknown"
 
                         detections.append({
                             "class_id": cls_id,
                             "class_name": name,
                             "confidence": round(conf, 4),
-                            "bbox_xyxy": xyxy
+                            "bbox_xyxy": [x1_orig, y1_orig, x2_orig, y2_orig]
                         })
 
                     det_classes = [d["class_name"] for d in detections]

@@ -1,0 +1,8 @@
+# Dataset Telur Bersih (Bebas Data Leakage)
+path: ../Egg Dataset Clean
+train: train/images
+val: valid/images
+test: test/images
+
+nc: 3
+names: ['cracked', 'dirt', 'good']
