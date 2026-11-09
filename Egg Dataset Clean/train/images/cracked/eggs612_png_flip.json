@@ -1,0 +1,36 @@
+{
+  "version": "6.3.1",
+  "flags": {},
+  "shapes": [
+    {
+      "label": "crack",
+      "points": [
+        [
+          315.0819672131148,
+          206.88524590163934
+        ],
+        [
+          239.67213114754097,
+          367.54098360655735
+        ],
+        [
+          193.7704918032787,
+          341.3114754098361
+        ],
+        [
+          269.1803278688525,
+          177.37704918032787
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "shape_type": "polygon",
+      "flags": {},
+      "mask": null
+    }
+  ],
+  "imagePath": "eggs612_png_flip.jpg",
+  "imageData": null,
+  "imageHeight": 640,
+  "imageWidth": 640
+}

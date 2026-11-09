@@ -1,0 +1,36 @@
+{
+  "version": "6.3.1",
+  "flags": {},
+  "shapes": [
+    {
+      "label": "crack",
+      "points": [
+        [
+          357.70491803278685,
+          274.0983606557377
+        ],
+        [
+          392.13114754098365,
+          277.37704918032784
+        ],
+        [
+          395.4098360655738,
+          467.54098360655735
+        ],
+        [
+          359.344262295082,
+          464.26229508196724
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "shape_type": "polygon",
+      "flags": {},
+      "mask": null
+    }
+  ],
+  "imagePath": "eggs606_png.jpg",
+  "imageData": null,
+  "imageHeight": 640,
+  "imageWidth": 640
+}
