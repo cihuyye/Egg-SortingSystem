@@ -65,6 +65,39 @@ if YOLO_AVAILABLE and os.path.exists(MODEL_PATH):
 else:
     print(f"[YOLOv8] ⚠️ Model tidak aktif (YOLO_AVAILABLE={YOLO_AVAILABLE}, file_exists={os.path.exists(MODEL_PATH)})")
 
+# ==============================================================================
+# INISIALISASI FIREBASE ADMIN SDK (REALTIME DATABASE)
+# ==============================================================================
+FIREBASE_AVAILABLE = False
+firebase_db_ref = None
+
+FIREBASE_KEY_PATH = os.path.join(BASE_DIR, "serviceAccountKey.json")
+FIREBASE_DATABASE_URL = "https://eggsort-ai-default-rtdb.asia-southeast1.firebasedatabase.app"
+
+try:
+    import firebase_admin
+    from firebase_admin import credentials, db
+
+    if os.path.exists(FIREBASE_KEY_PATH):
+        if not firebase_admin._apps:
+            cred = credentials.Certificate(FIREBASE_KEY_PATH)
+            firebase_admin.initialize_app(cred, {
+                'databaseURL': FIREBASE_DATABASE_URL
+            })
+        firebase_db_ref = db.reference()
+        FIREBASE_AVAILABLE = True
+        print(f"[Firebase] ✅ Terhubung ke Realtime Database: {FIREBASE_DATABASE_URL}")
+        # Inisialisasi status sistem di Firebase
+        firebase_db_ref.child("system_status").update({
+            "api": "Flask-YOLOv8",
+            "status": "ONLINE",
+            "last_active": time.strftime("%Y-%m-%d %H:%M:%S")
+        })
+    else:
+        print(f"[Firebase] ⚠️ File serviceAccountKey.json tidak ditemukan di: {FIREBASE_KEY_PATH}")
+except Exception as e:
+    print(f"[Firebase] ⚠️ Gagal menginisialisasi Firebase: {e}")
+
 
 # ==============================================================================
 # ROUTES WEB DASHBOARD
@@ -360,6 +393,24 @@ def predict():
 
         # 4. Evaluasi apakah ada telur valid yang terdeteksi
         if valid_egg_count == 0:
+            if FIREBASE_AVAILABLE and firebase_db_ref:
+                try:
+                    not_egg_payload = {
+                        "is_egg": False,
+                        "final_grade": "BUKAN TELUR",
+                        "grade_code": "NOT_EGG",
+                        "gate": 0,
+                        "dominant_defect": "unknown",
+                        "confidence": 0.0,
+                        "shape_index": 0.0,
+                        "weight_estimate_g": 0.0,
+                        "sorting_action": "Bukan Telur: Objek diabaikan",
+                        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+                    }
+                    firebase_db_ref.child("current_sorting").set(not_egg_payload)
+                except Exception:
+                    pass
+
             return jsonify({
                 "status": "not_egg",
                 "is_egg": False,
@@ -465,6 +516,30 @@ def predict():
             "role": llm_meta.get("role", "-"),
             "status": llm_meta.get("status", "-")
         }
+
+        # 8. Sinkronisasi Real-Time ke Firebase untuk Aktuator Konveyor ESP32
+        if FIREBASE_AVAILABLE and firebase_db_ref:
+            try:
+                final_grade_str = str(grading_result.get("final_grade", "Mutu III (Reject)"))
+                grade_code_str = str(grading_result.get("grade_code", "MUTU_III"))
+                gate_num = 1 if grade_code_str == "MUTU_I" else (2 if grade_code_str == "MUTU_II" else 3)
+                sort_payload = {
+                    "is_egg": True,
+                    "final_grade": final_grade_str,
+                    "grade_code": grade_code_str,
+                    "gate": gate_num,
+                    "dominant_defect": dominant_defect_360,
+                    "confidence": round(float(final_conf_360 * 100), 1),
+                    "shape_index": round(float(best_shape_result.get("shape_index_si", 0.0)), 2),
+                    "weight_estimate_g": round(float(best_shape_result.get("weight_estimate_gram", 0.0)), 2),
+                    "sorting_action": grading_result.get("sorting_action", ""),
+                    "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+                }
+                firebase_db_ref.child("current_sorting").set(sort_payload)
+                firebase_db_ref.child("sorting_history").push(sort_payload)
+                print(f"[Firebase] ✅ Data sortir berhasil dikirim: {final_grade_str} (Gate {gate_num})")
+            except Exception as f_err:
+                print(f"[Firebase] ⚠️ Gagal update data sortir: {f_err}")
 
         return jsonify(response_data), 200
 
