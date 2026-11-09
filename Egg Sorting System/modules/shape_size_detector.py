@@ -228,27 +228,36 @@ def detect_physical_cracks(img_rgb: np.ndarray, ellipse_orig: Tuple) -> Tuple[bo
     kernel_e = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (erode_r, erode_r))
     mask_inner = cv2.erode(mask, kernel_e)
 
-    kernel_crack = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))
-    blackhat = cv2.morphologyEx(gray, cv2.MORPH_BLACKHAT, kernel_crack)
-    blackhat_egg = cv2.bitwise_and(blackhat, blackhat, mask=mask_inner)
-
-    _, crack_thresh = cv2.threshold(blackhat_egg, 18, 255, cv2.THRESH_BINARY)
-    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(crack_thresh)
-
+    # Multi-scale blackhat untuk mendeteksi retakan tipis dan tebal
     cracks_found = []
-    for i in range(1, num_labels):
-        area = stats[i, cv2.CC_STAT_AREA]
-        cw = stats[i, cv2.CC_STAT_WIDTH]
-        ch = stats[i, cv2.CC_STAT_HEIGHT]
-        diag = np.sqrt(cw**2 + ch**2)
-        aspect = max(cw, ch) / max(1, min(cw, ch))
 
-        if area >= 120 and diag >= 40.0 and aspect >= 2.0:
-            cracks_found.append({
-                "area": int(area),
-                "diagonal_length": round(float(diag), 1),
-                "aspect_ratio": round(float(aspect), 2)
-            })
+    for kernel_size in [(7, 7), (11, 11), (15, 15)]:
+        kernel_crack = cv2.getStructuringElement(cv2.MORPH_RECT, kernel_size)
+        blackhat = cv2.morphologyEx(gray, cv2.MORPH_BLACKHAT, kernel_crack)
+        blackhat_egg = cv2.bitwise_and(blackhat, blackhat, mask=mask_inner)
+
+        # CLAHE untuk meningkatkan kontras retakan halus
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        enhanced = clahe.apply(blackhat_egg)
+
+        _, crack_thresh = cv2.threshold(enhanced, 15, 255, cv2.THRESH_BINARY)
+        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(crack_thresh)
+
+        for i in range(1, num_labels):
+            area = stats[i, cv2.CC_STAT_AREA]
+            cw = stats[i, cv2.CC_STAT_WIDTH]
+            ch = stats[i, cv2.CC_STAT_HEIGHT]
+            diag = np.sqrt(cw**2 + ch**2)
+            aspect = max(cw, ch) / max(1, min(cw, ch))
+
+            # Threshold lebih sensitif: area >= 60, diagonal >= 25, aspek memanjang >= 1.8
+            if area >= 60 and diag >= 25.0 and aspect >= 1.8:
+                cracks_found.append({
+                    "area": int(area),
+                    "diagonal_length": round(float(diag), 1),
+                    "aspect_ratio": round(float(aspect), 2),
+                    "kernel": kernel_size[0]
+                })
 
     return len(cracks_found) > 0, cracks_found
 
