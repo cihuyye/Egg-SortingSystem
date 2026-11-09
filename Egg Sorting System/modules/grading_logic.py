@@ -9,7 +9,7 @@ def evaluate_final_grade(
     """
     Logika Pengambilan Keputusan Akhir Mutu Telur Berdasarkan SNI 3926:2023.
     Mengintegrasikan langsung hasil klasifikasi YOLOv8 (keutuhan & kebersihan cangkang)
-    dengan pengukuran geometri dan candling OpenCV tanpa ketergantungan model luar (SVM).
+    dengan pengukuran geometri dan candling OpenCV secara langsung (YOLOv8 end-to-end classification).
 
     Parameter Standar SNI 3926:2023:
     - Mutu I (Grade A):
@@ -42,10 +42,11 @@ def evaluate_final_grade(
         return {
             "final_grade": "Mutu III (Reject)",
             "grade_code": "MUTU_III",
-            "yolo_primary_factor": f"Retak cangkang terdeteksi ({yolo_confidence:.1%})",
-            "sorting_action": "Alihkan ke wadah reject (jangan sampai pecah di jalur konveyor)",
-            "reason": f"Cangkang telur retak (cracked) dengan keyakinan YOLOv8 {yolo_confidence:.1%}",
-            "standard_reference": "SNI 3926:2023 Tabel 1 (Kerabang: Retak)",
+            "yolo_primary_factor": f"Retak kerabang terdeteksi ({yolo_confidence:.1%})",
+            "sorting_action": "Reject Ejector: Alihkan ke wadah karantina afkir (cegah kontaminasi)",
+            "sni_action": "Dilarang diedarkan sebagai telur segar utuh (Tabel 1 & 2 SNI 3926:2023). Cacat kerabang retak/tidak utuh rawan cemaran Salmonella spp. Alihkan ke karantina afkir/pemusnahan.",
+            "reason": f"Kerabang telur retak (cracked) melanggar syarat keutuhan SNI 3926:2023 Tabel 1 (keyakinan YOLOv8: {yolo_confidence:.1%})",
+            "standard_reference": "SNI 3926:2023 Tabel 1 (Kerabang: Tidak Utuh / Retak)",
             "size_info": f"{size_cat} ({weight_g:.1f}g)"
         }
 
@@ -57,10 +58,11 @@ def evaluate_final_grade(
         return {
             "final_grade": "Mutu III (Reject)",
             "grade_code": "MUTU_III",
-            "yolo_primary_factor": "Cangkang utuh, namun interior reject",
-            "sorting_action": "Alihkan ke wadah reject",
+            "yolo_primary_factor": "Kerabang utuh, namun interior tidak memenuhi syarat mutu",
+            "sorting_action": "Reject Ejector: Alihkan ke wadah karantina afkir",
+            "sni_action": "Dilarang diedarkan sebagai telur segar utuh demi keamanan pangan (Tabel 1 & 2 SNI 3926:2023). Alihkan ke karantina afkir.",
             "reason": f"{alasan_interior} (SNI 3926:2023 Tabel 1 Poin 2/3)",
-            "standard_reference": "SNI 3926:2023 Tabel 1 (Kantung Udara > 0.9 cm / Noda Asing)",
+            "standard_reference": "SNI 3926:2023 Tabel 1 (Kantung Udara > 0.9 cm / Benda Asing)",
             "size_info": f"{size_cat} ({weight_g:.1f}g)"
         }
 
@@ -73,19 +75,20 @@ def evaluate_final_grade(
     if is_dirty or is_air_mutu_2 or is_abnormal_shape:
         reasons = []
         if is_dirty:
-            reasons.append(f"Cangkang terdapat noda kotoran (YOLOv8: dirt {yolo_confidence:.1%})")
+            reasons.append(f"Kerabang terdapat noda kotoran ringan (toleransi ≤ 1/32 permukaan SNI Tabel 1)")
         if is_air_mutu_2:
-            reasons.append(f"Kedalaman kantung udara {air_depth_cm:.2f} cm (toleransi 0.5 - 0.9 cm)")
+            reasons.append(f"Kedalaman kantung udara {air_depth_cm:.2f} cm (memenuhi toleransi Mutu II 0.5 - 0.9 cm)")
         if is_abnormal_shape:
-            reasons.append(f"Indeks bentuk {si:.1f}% di luar standar normal SNI 72-76")
+            reasons.append(f"Indeks bentuk {si:.1f}% di luar standar ideal SNI 72-76")
 
-        action = "Alihkan ke jalur pencucian/pembersihan telur" if is_dirty else "Kemas ke tray kelas komersial / industri kue"
+        action = "Gate 2: Alihkan ke jalur komersial / industri olahan pangan (bakery/mie)"
         
         return {
             "final_grade": "Mutu II (Grade B)",
             "grade_code": "MUTU_II",
-            "yolo_primary_factor": f"Cangkang: {yolo_defect_class} ({yolo_confidence:.1%})",
+            "yolo_primary_factor": f"Kerabang: {yolo_defect_class} ({yolo_confidence:.1%})",
             "sorting_action": action,
+            "sni_action": "Lolos konsumsi reguler & bahan baku industri olahan pangan (bakery/kue/mie). Sanitasi kering noda kerabang ≤ 1/32 (Tabel 1 SNI 3926:2023). Prioritaskan distribusi cepat.",
             "reason": "; ".join(reasons),
             "standard_reference": "SNI 3926:2023 Tabel 1 Syarat Mutu II",
             "size_info": f"{size_cat} ({weight_g:.1f}g)"
@@ -96,9 +99,10 @@ def evaluate_final_grade(
     return {
         "final_grade": "Mutu I (Grade A)",
         "grade_code": "MUTU_I",
-        "yolo_primary_factor": f"Cangkang utuh & mulus bersih (YOLOv8: good {yolo_confidence:.1%})",
-        "sorting_action": f"Kemas ke wadah ritel premium ({size_cat})",
-        "reason": f"Cangkang utuh bersih, Shape Index ideal ({si:.1f}%), kantung udara segar (< 0.5 cm, aktual {air_depth_cm:.2f} cm), bebas bercak",
+        "yolo_primary_factor": f"Kerabang utuh & bersih mulus (YOLOv8: good {yolo_confidence:.1%})",
+        "sorting_action": f"Gate 1: Kemas ke wadah ritel resmi berlabel ({size_cat})",
+        "sni_action": "Layak konsumsi langsung segar (Pasal 8 & 9 SNI 3926:2023). Kemas dalam kemasan ritel berlabel resmi (nama produk, tanggal, NKV, tingkatan mutu). Simpan pada suhu ruang maks 30°C / kelembaban maks 90% (Pasal 10).",
+        "reason": f"Kerabang utuh bersih, Shape Index ideal ({si:.1f}%), kantung udara segar (< 0.5 cm, aktual {air_depth_cm:.2f} cm), bebas bercak",
         "standard_reference": "SNI 3926:2023 Tabel 1 Syarat Mutu I",
         "size_info": f"{size_cat} ({weight_g:.1f}g)"
     }

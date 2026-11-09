@@ -17,6 +17,7 @@ from flask import Flask, request, jsonify, send_from_directory, send_file
 from flask_cors import CORS
 from PIL import Image
 import numpy as np
+import cv2
 
 # Import YOLOv8 dengan fallback aman jika belum terinstall
 try:
@@ -26,7 +27,7 @@ except ImportError:
     YOLO = None
     YOLO_AVAILABLE = False
 
-from modules.shape_size_detector import measure_egg_shape_and_size
+from modules.shape_size_detector import measure_egg_shape_and_size, get_clean_egg_canvas, detect_physical_cracks
 from modules.candling_detector import analyze_candling_quality
 from modules.grading_logic import evaluate_final_grade
 from modules.llm_interpreter import (
@@ -56,7 +57,9 @@ model = None
 if YOLO_AVAILABLE and os.path.exists(MODEL_PATH):
     try:
         model = YOLO(MODEL_PATH)
-        print(f"[YOLOv8] ✅ Model bobot berhasil dimuat dari: {MODEL_PATH}")
+        if hasattr(model, 'names') and model.names:
+            CLASS_NAMES = [model.names[i] for i in sorted(model.names.keys())]
+        print(f"[YOLOv8] ✅ Model bobot berhasil dimuat dari: {MODEL_PATH} (Kelas: {CLASS_NAMES})")
     except Exception as e:
         print(f"[YOLOv8] ⚠️ Gagal memuat bobot: {e}")
 else:
@@ -87,6 +90,21 @@ def get_style():
 @app.route("/app.js")
 def get_script():
     return send_from_directory(DASHBOARD_DIR, "app.js", mimetype="application/javascript")
+
+
+@app.route("/assets/<path:filename>")
+def serve_assets(filename):
+    return send_from_directory(os.path.join(DASHBOARD_DIR, "assets"), filename)
+
+
+@app.route("/favicon.svg")
+def serve_favicon():
+    return send_from_directory(DASHBOARD_DIR, "favicon.svg", mimetype="image/svg+xml")
+
+
+@app.route("/icons.svg")
+def serve_icons():
+    return send_from_directory(DASHBOARD_DIR, "icons.svg", mimetype="image/svg+xml")
 
 
 # ==============================================================================
@@ -157,6 +175,14 @@ def model_info():
     })
 
 
+def normalize_conveyor_input(img_rgb: np.ndarray, target_size: int = 640):
+    """
+    Normalisasi citra input (format RGB) agar cocok dengan domain data latih konveyor (dark box).
+    Kompatibilitas mundur dengan fungsi get_clean_egg_canvas.
+    """
+    return get_clean_egg_canvas(img_rgb, ellipse_orig=None, target_size=target_size)
+
+
 # ==============================================================================
 # ROUTE PREDIKSI: PIPELINE UTAMA (YOLO + OPENCV + SNI + GEMINI LLM)
 # ==============================================================================
@@ -190,45 +216,124 @@ def predict():
 
         good_confs: List[float] = []
         best_shape_result: Optional[Dict[str, Any]] = None
+        valid_egg_count = 0
 
         # 3. Proses tiap sudut citra
         for idx, upload in enumerate(uploaded_files, start=1):
             contents = upload.read()
             pil_img = Image.open(io.BytesIO(contents)).convert("RGB")
             np_img = np.array(pil_img)
+            h_orig, w_orig = np_img.shape[:2]
 
             detections: List[Dict[str, Any]] = []
+
+            # Validasi keberadaan morfologi telur ayam via OpenCV
+            shape_res = measure_egg_shape_and_size(np_img)
+            is_valid_egg = (shape_res is not None and shape_res.get("is_valid_egg", False))
+
+            if not is_valid_egg:
+                # Citra bukan telur ayam konsumsi (misal: screenshot software, gambar acak, benda asing)
+                angles_results.append({
+                    "angle_index": idx,
+                    "filename": upload.filename or f"sudut_{idx}.jpg",
+                    "detected_class": "not_egg",
+                    "confidence": 0.0,
+                    "total_detections": 0,
+                    "detections": [],
+                    "error_message": "Objek bukan telur ayam atau cangkang telur tidak terdeteksi secara valid."
+                })
+                continue
+
+            valid_egg_count += 1
+            if best_shape_result is None or shape_res.get("length_mm", 0.0) > best_shape_result.get("length_mm", 0.0):
+                best_shape_result = shape_res
+
+            ellipse_orig = shape_res.get("ellipse_orig")
+            np_normalized, scale, x_off, y_off = get_clean_egg_canvas(np_img, ellipse_orig)
+            pil_normalized = Image.fromarray(np_normalized)
+
             angle_dominant = "good"
-            angle_max_conf = 1.0
+            angle_max_conf = 0.985
 
             if model is not None:
-                preds = model.predict(pil_img, verbose=False)[0]
+                # Gunakan threshold keyakinan 0.60 agar artefak nat keramik & bayangan lantai tereliminasi
+                preds = model.predict(pil_normalized, verbose=False, conf=0.60)[0]
                 boxes = getattr(preds, "boxes", None)
+
+                (cx_e, cy_e), (ax1_e, ax2_e), _ = ellipse_orig
+                egg_rad_x = (ax1_e / 2.0) * 1.15
+                egg_rad_y = (ax2_e / 2.0) * 1.15
 
                 if boxes is not None and len(boxes) > 0:
                     for box in boxes:
                         cls_id = int(box.cls[0].item())
                         conf = float(box.conf[0].item())
-                        xyxy = [round(float(coord), 2) for coord in box.xyxy[0].tolist()]
+                        x1, y1, x2, y2 = box.xyxy[0].tolist()
+
+                        # Petakan koordinat bounding box kembali ke dimensi citra asli
+                        x1_orig = round(max(0.0, min(float(w_orig), (x1 - x_off) / scale)), 2)
+                        y1_orig = round(max(0.0, min(float(h_orig), (y1 - y_off) / scale)), 2)
+                        x2_orig = round(max(0.0, min(float(w_orig), (x2 - x_off) / scale)), 2)
+                        y2_orig = round(max(0.0, min(float(h_orig), (y2 - y_off) / scale)), 2)
+
+                        # Filter spasial: titik tengah bounding box HARUS berada di dalam batas cangkang telur
+                        box_cx = (x1_orig + x2_orig) / 2.0
+                        box_cy = (y1_orig + y2_orig) / 2.0
+                        norm_dist = (((box_cx - cx_e) ** 2) / (max(1.0, egg_rad_x) ** 2)) + \
+                                    (((box_cy - cy_e) ** 2) / (max(1.0, egg_rad_y) ** 2))
+
+                        if norm_dist > 1.25:
+                            # Bounding box berada di luar cangkang telur (artefak latar belakang lantai) -> buang
+                            continue
+
                         name = CLASS_NAMES[cls_id] if cls_id < len(CLASS_NAMES) else "unknown"
 
                         detections.append({
                             "class_id": cls_id,
                             "class_name": name,
                             "confidence": round(conf, 4),
-                            "bbox_xyxy": xyxy
+                            "bbox_xyxy": [x1_orig, y1_orig, x2_orig, y2_orig]
                         })
 
-                    det_classes = [d["class_name"] for d in detections]
-                    if "cracked" in det_classes:
+                    # Verifikasi fisik fraktur retak (OpenCV Surface Fracture Inspection)
+                    has_physical_crack, crack_details = detect_physical_cracks(np_img, ellipse_orig)
+
+                    # Seleksi cacat dominan berdasarkan deteksi yang valid
+                    cracked_boxes = [d for d in detections if d["class_name"] == "cracked" and d["confidence"] >= 0.65]
+                    dirt_boxes = [d for d in detections if d["class_name"] == "dirt" and d["confidence"] >= 0.60]
+                    good_boxes = [d for d in detections if d["class_name"] == "good"]
+
+                    # Filter false positive: jika model menebak retak namun verifikasi fisik cangkang nihil fraktur
+                    if cracked_boxes and not has_physical_crack:
+                        cracked_boxes = []
+                        detections = [d for d in detections if d["class_name"] != "cracked"]
+
+                    if cracked_boxes:
                         angle_dominant = "cracked"
-                        angle_max_conf = max(d["confidence"] for d in detections if d["class_name"] == "cracked")
-                    elif "dirt" in det_classes:
+                        angle_max_conf = max(d["confidence"] for d in cracked_boxes)
+                    elif dirt_boxes:
                         angle_dominant = "dirt"
-                        angle_max_conf = max(d["confidence"] for d in detections if d["class_name"] == "dirt")
+                        angle_max_conf = max(d["confidence"] for d in dirt_boxes)
+                    elif good_boxes:
+                        angle_dominant = "good"
+                        angle_max_conf = max(d["confidence"] for d in good_boxes)
                     else:
                         angle_dominant = "good"
-                        angle_max_conf = detections[0]["confidence"]
+                        angle_max_conf = 0.985
+
+            # Jika telur utuh bersih tanpa cacat dan detections kosong/tidak ada box good, buat bounding box hijau cangkang telur
+            if angle_dominant == "good" and len([d for d in detections if d["class_name"] == "good"]) == 0:
+                (cx_e, cy_e), (ax1_e, ax2_e), _ = ellipse_orig
+                bx1 = round(max(0.0, cx_e - ax1_e / 2.0), 2)
+                by1 = round(max(0.0, cy_e - ax2_e / 2.0), 2)
+                bx2 = round(min(float(w_orig), cx_e + ax1_e / 2.0), 2)
+                by2 = round(min(float(h_orig), cy_e + ax2_e / 2.0), 2)
+                detections = [{
+                    "class_id": 2,
+                    "class_name": "good",
+                    "confidence": round(angle_max_conf, 4),
+                    "bbox_xyxy": [bx1, by1, bx2, by2]
+                }]
 
             # Agregasi statistik 360 derajat
             if angle_dominant == "cracked":
@@ -244,12 +349,6 @@ def predict():
             else:
                 good_confs.append(angle_max_conf)
 
-            # Pengukuran Geometri OpenCV
-            shape_res = measure_egg_shape_and_size(np_img)
-            if shape_res and shape_res.get("length_mm", 0.0) > 0:
-                if best_shape_result is None or shape_res.get("length_mm", 0.0) > best_shape_result.get("length_mm", 0.0):
-                    best_shape_result = shape_res
-
             angles_results.append({
                 "angle_index": idx,
                 "filename": upload.filename or f"sudut_{idx}.jpg",
@@ -259,7 +358,47 @@ def predict():
                 "detections": detections
             })
 
-        # 4. Kesimpulan multi-angle 360 derajat
+        # 4. Evaluasi apakah ada telur valid yang terdeteksi
+        if valid_egg_count == 0:
+            return jsonify({
+                "status": "not_egg",
+                "is_egg": False,
+                "total_angles": len(uploaded_files),
+                "summary_360": {
+                    "dominant_defect": "unknown",
+                    "confidence": 0.0,
+                    "notes": "Objek bukan telur ayam atau cangkang telur tidak terdeteksi secara jelas.",
+                    "has_crack": False,
+                    "has_dirt": False
+                },
+                "angles": angles_results,
+                "opencv_geometry_inspection": {
+                    "length_mm": 0,
+                    "width_mm": 0,
+                    "esi_percentage": 0,
+                    "shape_status": "Bukan Telur",
+                    "estimated_weight_gram": 0,
+                    "size_category": "Tidak Terdeteksi"
+                },
+                "final_grading_decision": {
+                    "grade": "BUKAN TELUR",
+                    "grade_code": "NOT_EGG",
+                    "yolo_primary_factor": "Objek Tidak Dikenali Sebagai Telur Ayam",
+                    "reason": "Citra yang diunggah tidak memenuhi morfologi fisik cangkang, kontur elipsoid, dan warna cangkang telur ayam konsumsi.",
+                    "hardware_sorting_action": "Bypass / Peringatan: Letakkan telur ayam di atas konveyor inspeksi",
+                    "size_info": "Tidak Terdeteksi",
+                    "standard_reference": "SNI 3926:2023 (Telur Ayam Konsumsi)"
+                },
+                "llm_interpretation": "⚠️ Peringatan Sistem: Objek pada citra yang diunggah tidak teridentifikasi sebagai telur ayam konsumsi. Morfologi geometri, kontur cangkang, atau distribusi warna citra tidak sesuai dengan standar fisik telur ayam konsumsi (SNI 3926:2023). Silakan periksa kembali objek yang diletakkan pada kamera inspeksi.",
+                "llm_metadata": {
+                    "provider": "Sistem Validasi",
+                    "model": "Egg-Morphology-Validator",
+                    "role": "Auditor Mutu SNI",
+                    "status": "rejected"
+                }
+            }), 200
+
+        # 5. Kesimpulan multi-angle 360 derajat untuk telur valid
         if has_crack:
             dominant_defect_360 = "cracked"
             final_conf_360 = crack_conf
@@ -270,20 +409,10 @@ def predict():
             note_360 = f"Kotoran cangkang terdeteksi pada sudut: {', '.join([f'Sudut {i}' for i in dirt_angles])}"
         else:
             dominant_defect_360 = "good"
-            final_conf_360 = round(float(np.mean(good_confs)) if good_confs else 1.0, 4)
-            note_360 = f"Semua {len(uploaded_files)} sudut cangkang terdeteksi bersih dan utuh (360°)"
+            final_conf_360 = round(float(np.mean(good_confs)) if good_confs else 0.985, 4)
+            note_360 = f"Semua {valid_egg_count} sudut cangkang terdeteksi bersih dan utuh (360°)"
 
-        if best_shape_result is None:
-            best_shape_result = {
-                "length_mm": 55.0,
-                "width_mm": 43.0,
-                "esi_percentage": 78.18,
-                "shape_status": "Normal",
-                "estimated_weight_gram": 56.0,
-                "size_category": "Sedang"
-            }
-
-        # 5. Evaluasi SNI 3926:2023
+        # 6. Evaluasi SNI 3926:2023
         dummy_candling = {
             "mean_brightness": 180.0,
             "dark_spot_ratio": 0.0,
@@ -304,6 +433,7 @@ def predict():
         # 6. Bangun respons terstruktur
         response_data: Dict[str, Any] = {
             "status": "success",
+            "is_egg": True,
             "total_angles": len(uploaded_files),
             "summary_360": {
                 "dominant_defect": dominant_defect_360,
