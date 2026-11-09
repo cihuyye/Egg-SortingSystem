@@ -1,0 +1,36 @@
+{
+  "version": "7.9.1",
+  "flags": {},
+  "shapes": [
+    {
+      "label": "dirt",
+      "points": [
+        [
+          277.49704840613924,
+          315.2302243211334
+        ],
+        [
+          254.67138921684372,
+          335.69460842188107
+        ],
+        [
+          275.13577331759154,
+          360.88154269972443
+        ],
+        [
+          289.3034238488783,
+          337.2687918142463
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "shape_type": "polygon",
+      "flags": {},
+      "mask": null
+    }
+  ],
+  "imagePath": "dirty_4-220822-00095_9_jpg.jpg",
+  "imageData": null,
+  "imageHeight": 640,
+  "imageWidth": 640
+}
