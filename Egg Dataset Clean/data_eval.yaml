@@ -1,8 +1,0 @@
-# Dataset Telur Bersih (Bebas Data Leakage) - 2 Defect Classes (good = negative background)
-path: D:/github_rama/Egg-SortingSystem/Egg Dataset Clean
-train: train/images
-val: valid/images
-test: test/images
-
-nc: 2
-names: ['cracked', 'dirt']

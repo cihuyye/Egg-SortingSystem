@@ -1,6 +1,7 @@
+path: D:/github_rama/Egg-SortingSystem/Egg Dataset Clean
 train: train/images
 val: valid/images
 test: test/images
 
 nc: 2
-names: ['crack', 'dirt']
+names: ['cracked', 'dirt']
