@@ -6,5 +6,5 @@ echo   MENJALANKAN FLASK API (YOLOv8-seg + OpenCV + Firebase)
 echo ============================================================
 echo.
 cd /d "%~dp0"
-"C:\Users\lenovo\AppData\Local\Python\bin\python.exe" app_flask.py
+".venv\Scripts\python.exe" app_flask.py
 pause

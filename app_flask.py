@@ -27,7 +27,7 @@ except ImportError:
     YOLO = None
     YOLO_AVAILABLE = False
 
-from modules.shape_size_detector import measure_egg_shape_and_size, get_clean_egg_canvas, detect_physical_cracks
+from modules.shape_size_detector import measure_egg_shape_and_size, get_clean_egg_canvas, detect_physical_cracks, preprocess_egg_image
 from modules.candling_detector import analyze_candling_quality
 from modules.grading_logic import evaluate_final_grade
 from modules.llm_interpreter import (
@@ -258,14 +258,32 @@ def predict():
         for idx, upload in enumerate(uploaded_files, start=1):
             contents = upload.read()
             pil_img = Image.open(io.BytesIO(contents)).convert("RGB")
-            np_img = np.array(pil_img)
-            h_orig, w_orig = np_img.shape[:2]
+            np_raw = np.array(pil_img)
+            raw_h, raw_w = np_raw.shape[:2]
+
+            # ── PREPROCESSING: Normalisasi citra ke domain data latih (dark-box, centered) ──
+            # Memastikan foto dari kamera HP, lantai keramik, latar terang, dll bisa dideteksi
+            # dengan akurat — sama persis dengan pipeline preprocess_dataset.ipynb
+            print(f"[PREDICT] Angle {idx}: preprocessing citra {np_raw.shape} → 640×640 dark-canvas ...")
+            np_img, transform_info = preprocess_egg_image(
+                np_raw, target_canvas=640, target_egg_height=416, return_transform=True
+            )
+            print(f"[PREDICT] Angle {idx}: preprocessing selesai → shape={np_img.shape}")
+
+            h_canvas, w_canvas = np_img.shape[:2]  # = 640, 640 setelah preprocessing
+            norm_scale = transform_info.get("norm_scale", 1.0)
+            tx = transform_info.get("tx", 0.0)
+            ty = transform_info.get("ty", 0.0)
+            ellipse_raw = transform_info.get("ellipse_orig")
 
             detections: List[Dict[str, Any]] = []
 
-            # Validasi keberadaan morfologi telur ayam via OpenCV
-            shape_res = measure_egg_shape_and_size(np_img)
+            # Validasi keberadaan morfologi telur ayam via OpenCV (citra sudah dark-background)
+            # base_px_to_mm=0.120 dikalibrasi untuk canvas preprocessed 640x640 (telur di-zoom ke ~416px)
+            shape_res = measure_egg_shape_and_size(np_img, base_px_to_mm=0.120)
+            print(f"[PREDICT] Angle {idx}: shape_res = {shape_res}")
             is_valid_egg = (shape_res is not None and shape_res.get("is_valid_egg", False))
+            print(f"[PREDICT] Angle {idx}: is_valid_egg = {is_valid_egg}")
 
             if not is_valid_egg:
                 # Citra bukan telur ayam konsumsi (misal: screenshot software, gambar acak, benda asing)
@@ -307,30 +325,36 @@ def predict():
                         x1, y1, x2, y2 = box.xyxy[0].tolist()
                         print(f"[PREDICT]   norm box: cls={cls_id} ({CLASS_NAMES[cls_id]}), conf={conf:.4f}")
 
-                        # Petakan koordinat bounding box kembali ke dimensi citra asli
-                        x1_orig = round(max(0.0, min(float(w_orig), (x1 - x_off) / scale)), 2)
-                        y1_orig = round(max(0.0, min(float(h_orig), (y1 - y_off) / scale)), 2)
-                        x2_orig = round(max(0.0, min(float(w_orig), (x2 - x_off) / scale)), 2)
-                        y2_orig = round(max(0.0, min(float(h_orig), (y2 - y_off) / scale)), 2)
+                        # Koordinat di dalam kanvas 640x640 preprocessed
+                        x1_c = max(0.0, min(float(w_canvas), (x1 - x_off) / scale))
+                        y1_c = max(0.0, min(float(h_canvas), (y1 - y_off) / scale))
+                        x2_c = max(0.0, min(float(w_canvas), (x2 - x_off) / scale))
+                        y2_c = max(0.0, min(float(h_canvas), (y2 - y_off) / scale))
 
                         # Filter spasial: titik tengah bounding box HARUS berada di dalam batas cangkang telur
-                        box_cx = (x1_orig + x2_orig) / 2.0
-                        box_cy = (y1_orig + y2_orig) / 2.0
+                        box_cx = (x1_c + x2_c) / 2.0
+                        box_cy = (y1_c + y2_c) / 2.0
                         norm_dist = (((box_cx - cx_e) ** 2) / (max(1.0, egg_rad_x) ** 2)) + \
                                     (((box_cy - cy_e) ** 2) / (max(1.0, egg_rad_y) ** 2))
 
                         if norm_dist <= 1.25:
+                            # Petakan koordinat kembali ke resolusi citra asli (raw_w x raw_h)
+                            rx1 = round(max(0.0, min(float(raw_w), (x1_c - tx) / norm_scale)), 2)
+                            ry1 = round(max(0.0, min(float(raw_h), (y1_c - ty) / norm_scale)), 2)
+                            rx2 = round(max(0.0, min(float(raw_w), (x2_c - tx) / norm_scale)), 2)
+                            ry2 = round(max(0.0, min(float(raw_h), (y2_c - ty) / norm_scale)), 2)
                             name = CLASS_NAMES[cls_id] if cls_id < len(CLASS_NAMES) else "unknown"
                             detections.append({
                                 "class_id": cls_id,
                                 "class_name": name,
                                 "confidence": round(conf, 4),
-                                "bbox_xyxy": [x1_orig, y1_orig, x2_orig, y2_orig],
+                                "bbox_xyxy": [rx1, ry1, rx2, ry2],
                                 "source": "yolo_norm"
                             })
 
-                # 2. Prediksi pada citra asli (raw) agar retakan halus yang hilang karena interpolasi kanvas tetap tertangkap
-                preds_raw = model.predict(pil_img, verbose=False, conf=0.10)[0]
+                # 2. Prediksi pada citra preprocessed sekali lagi (tanpa kanvas ternormalisasi)
+                # agar retakan halus yang mungkin hilang karena interpolasi get_clean_egg_canvas tetap tertangkap
+                preds_raw = model.predict(Image.fromarray(np_img), verbose=False, conf=0.10)[0]
                 boxes_raw = getattr(preds_raw, "boxes", None)
                 print(f"[PREDICT] Angle {idx}: preds_raw boxes = {len(boxes_raw) if boxes_raw is not None else 0}")
                 if boxes_raw is not None and len(boxes_raw) > 0:
@@ -346,20 +370,25 @@ def predict():
                                     (((box_cy - cy_e) ** 2) / (max(1.0, egg_rad_y) ** 2))
 
                         if norm_dist <= 1.25:
+                            # Petakan koordinat kembali ke resolusi citra asli (raw_w x raw_h)
+                            rx1 = round(max(0.0, min(float(raw_w), (x1 - tx) / norm_scale)), 2)
+                            ry1 = round(max(0.0, min(float(raw_h), (y1 - ty) / norm_scale)), 2)
+                            rx2 = round(max(0.0, min(float(raw_w), (x2 - tx) / norm_scale)), 2)
+                            ry2 = round(max(0.0, min(float(raw_h), (y2 - ty) / norm_scale)), 2)
                             name = CLASS_NAMES[cls_id] if cls_id < len(CLASS_NAMES) else "unknown"
                             detections.append({
                                 "class_id": cls_id,
                                 "class_name": name,
                                 "confidence": round(conf, 4),
-                                "bbox_xyxy": [round(x1, 2), round(y1, 2), round(x2, 2), round(y2, 2)],
+                                "bbox_xyxy": [rx1, ry1, rx2, ry2],
                                 "source": "yolo_raw"
                             })
 
                 # Verifikasi fisik fraktur retak (OpenCV Surface Fracture Inspection)
                 has_physical_crack, crack_details = detect_physical_cracks(np_img, ellipse_orig)
 
-                # Seleksi cacat dominan: threshold rendah untuk crack agar hairline crack terdeteksi
-                cracked_boxes = [d for d in detections if d["class_name"] == "cracked" and d["confidence"] >= 0.12]
+                # Seleksi cacat dominan (threshold 0.25 untuk menyaring false positives bayangan)
+                cracked_boxes = [d for d in detections if d["class_name"] == "cracked" and d["confidence"] >= 0.25]
                 dirt_boxes = [d for d in detections if d["class_name"] == "dirt" and d["confidence"] >= 0.25]
 
                 if cracked_boxes:
@@ -381,11 +410,18 @@ def predict():
                     # FALLBACK: OpenCV menemukan fraktur fisik nyata
                     angle_dominant = "cracked"
                     angle_max_conf = 0.885
-                    (cx_e, cy_e), (ax1_e, ax2_e), _ = ellipse_orig
-                    bx1 = round(max(0.0, cx_e - ax1_e / 2.5), 2)
-                    by1 = round(max(0.0, cy_e - ax2_e / 2.5), 2)
-                    bx2 = round(min(float(w_orig), cx_e + ax1_e / 2.5), 2)
-                    by2 = round(min(float(h_orig), cy_e + ax2_e / 2.5), 2)
+                    if ellipse_raw is not None:
+                        (cx_r, cy_r), (ax1_r, ax2_r), _ = ellipse_raw
+                        bx1 = round(max(0.0, cx_r - ax1_r / 2.5), 2)
+                        by1 = round(max(0.0, cy_r - ax2_r / 2.5), 2)
+                        bx2 = round(min(float(raw_w), cx_r + ax1_r / 2.5), 2)
+                        by2 = round(min(float(raw_h), cy_r + ax2_r / 2.5), 2)
+                    else:
+                        (cx_e, cy_e), (ax1_e, ax2_e), _ = ellipse_orig
+                        bx1 = round(max(0.0, (cx_e - ax1_e / 2.5 - tx) / norm_scale), 2)
+                        by1 = round(max(0.0, (cy_e - ax2_e / 2.5 - ty) / norm_scale), 2)
+                        bx2 = round(min(float(raw_w), (cx_e + ax1_e / 2.5 - tx) / norm_scale), 2)
+                        by2 = round(min(float(raw_h), (cy_e + ax2_e / 2.5 - ty) / norm_scale), 2)
                     detections.append({
                         "class_id": 0,
                         "class_name": "cracked",
@@ -402,11 +438,18 @@ def predict():
 
             # Jika telur utuh bersih tanpa cacat dan detections kosong/tidak ada box good, buat bounding box hijau cangkang telur
             if angle_dominant == "good" and len([d for d in detections if d["class_name"] == "good"]) == 0:
-                (cx_e, cy_e), (ax1_e, ax2_e), _ = ellipse_orig
-                bx1 = round(max(0.0, cx_e - ax1_e / 2.0), 2)
-                by1 = round(max(0.0, cy_e - ax2_e / 2.0), 2)
-                bx2 = round(min(float(w_orig), cx_e + ax1_e / 2.0), 2)
-                by2 = round(min(float(h_orig), cy_e + ax2_e / 2.0), 2)
+                if ellipse_raw is not None:
+                    box_pts = cv2.boxPoints(ellipse_raw)
+                    bx1 = round(max(0.0, float(np.min(box_pts[:, 0]))), 2)
+                    by1 = round(max(0.0, float(np.min(box_pts[:, 1]))), 2)
+                    bx2 = round(min(float(raw_w), float(np.max(box_pts[:, 0]))), 2)
+                    by2 = round(min(float(raw_h), float(np.max(box_pts[:, 1]))), 2)
+                else:
+                    (cx_e, cy_e), (ax1_e, ax2_e), _ = ellipse_orig
+                    bx1 = round(max(0.0, (cx_e - ax1_e / 2.0 - tx) / norm_scale), 2)
+                    by1 = round(max(0.0, (cy_e - ax2_e / 2.0 - ty) / norm_scale), 2)
+                    bx2 = round(min(float(raw_w), (cx_e + ax1_e / 2.0 - tx) / norm_scale), 2)
+                    by2 = round(min(float(raw_h), (cy_e + ax2_e / 2.0 - ty) / norm_scale), 2)
                 detections = [{
                     "class_id": 2,
                     "class_name": "good",

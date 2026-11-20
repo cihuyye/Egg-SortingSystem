@@ -1,0 +1,11 @@
+{
+    "python.defaultInterpreterPath": "C:\\Users\\THOR\\AppData\\Local\\Python\\bin\\python.exe",
+    "python.pythonPath": "C:\\Users\\THOR\\AppData\\Local\\Python\\bin\\python.exe",
+    "[python]": {
+        "editor.defaultFormatter": null
+    },
+    "python.analysis.extraPaths": [
+        "c:\\laragon\\www\\Egg-SortingSystem"
+    ],
+    "python.analysis.autoImportCompletions": true
+}
