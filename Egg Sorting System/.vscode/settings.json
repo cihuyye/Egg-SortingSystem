@@ -1,19 +1,17 @@
 {
-    "python.defaultInterpreterPath": "C:\\Users\\lenovo\\AppData\\Local\\Python\\bin\\python.exe",
+    "python.defaultInterpreterPath": "C:\\Users\\lenovo\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe",
+    "[python]": {
+        "editor.defaultFormatter": null
+    },
     "python.analysis.extraPaths": [
-        "C:\\Users\\lenovo\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages",
-        "d:\\Egg Sorting System"
+        "d:\\github_rama\\Egg-SortingSystem",
+        "d:\\github_rama\\Egg-SortingSystem\\Egg Sorting System",
+        "C:\\Users\\lenovo\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages"
     ],
-    "python.analysis.typeCheckingMode": "off",
-    "python.analysis.diagnosticSeverityOverrides": {
-        "reportMissingImports": "none",
-        "reportUnknownMemberType": "none",
-        "reportUnknownVariableType": "none",
-        "reportGeneralTypeIssues": "none",
-        "reportOptionalMemberAccess": "none",
-        "reportOptionalSubscript": "none",
-        "reportUnusedImport": "none",
-        "reportIndexIssues": "none",
-        "reportArgumentType": "none"
-    }
+    "python.autoComplete.extraPaths": [
+        "d:\\github_rama\\Egg-SortingSystem",
+        "d:\\github_rama\\Egg-SortingSystem\\Egg Sorting System",
+        "C:\\Users\\lenovo\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages"
+    ],
+    "python.analysis.autoImportCompletions": true
 }

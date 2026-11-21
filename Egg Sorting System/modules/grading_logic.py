@@ -4,7 +4,8 @@ def evaluate_final_grade(
     yolo_defect_class: str,
     yolo_confidence: float,
     shape_dict: Dict[str, Any],
-    candling_dict: Dict[str, Any]
+    candling_dict: Dict[str, Any],
+    dirt_percentage: float = 0.0
 ) -> Dict[str, Any]:
     """
     Logika Pengambilan Keputusan Akhir Mutu Telur Berdasarkan SNI 3926:2023.
@@ -47,6 +48,19 @@ def evaluate_final_grade(
             "sni_action": "Dilarang diedarkan sebagai telur segar utuh (Tabel 1 & 2 SNI 3926:2023). Cacat kerabang retak/tidak utuh rawan cemaran Salmonella spp. Alihkan ke karantina afkir/pemusnahan.",
             "reason": f"Kerabang telur retak (cracked) melanggar syarat keutuhan SNI 3926:2023 Tabel 1 (keyakinan YOLOv8: {yolo_confidence:.1%})",
             "standard_reference": "SNI 3926:2023 Tabel 1 (Kerabang: Tidak Utuh / Retak)",
+            "size_info": f"{size_cat} ({weight_g:.1f}g)"
+        }
+
+    # Noda kotoran melebihi batas maksimal SNI 3926:2023 (> 1/16 atau > 6.25%)
+    if dirt_percentage > 6.25:
+        return {
+            "final_grade": "Mutu III (Reject)",
+            "grade_code": "MUTU_III",
+            "yolo_primary_factor": f"Noda kotoran kerabang {dirt_percentage:.1f}% (> 6.25% batas SNI)",
+            "sorting_action": "Reject Ejector: Alihkan ke wadah karantina afkir / sanitasi khusus",
+            "sni_action": "Dilarang diedarkan langsung (SNI 3926:2023 Tabel 1). Noda kotoran melebihi toleransi maksimal 1/16 luas permukaan.",
+            "reason": f"Noda kotoran kerabang {dirt_percentage:.1f}% melebihi ambang batas toleransi SNI 3926:2023 Tabel 1 (maksimal 6.25%)",
+            "standard_reference": "SNI 3926:2023 Tabel 1 (Toleransi Kebersihan Kerabang)",
             "size_info": f"{size_cat} ({weight_g:.1f}g)"
         }
 

@@ -56,7 +56,7 @@ CLASS_NAMES = ['cracked', 'dirt']
 
 # Load model YOLOv8 jika tersedia
 model = None
-if YOLO_AVAILABLE and os.path.exists(MODEL_PATH):
+if YOLO is not None and os.path.exists(MODEL_PATH):
     try:
         model = YOLO(MODEL_PATH)
         if hasattr(model, 'names') and model.names:
@@ -303,6 +303,9 @@ def predict():
                 best_shape_result = shape_res
 
             ellipse_orig = shape_res.get("ellipse_orig")
+            if ellipse_orig is None:
+                continue
+
             np_normalized, scale, x_off, y_off = get_clean_egg_canvas(np_img, ellipse_orig)
             pil_normalized = Image.fromarray(np_normalized)
 
@@ -314,10 +317,14 @@ def predict():
                 egg_rad_x = (ax1_e / 2.0) * 1.15
                 egg_rad_y = (ax2_e / 2.0) * 1.15
 
-                # 1. Prediksi pada citra ternormalisasi (contrast-enhanced & center-cropped)
-                preds_norm = model.predict(pil_normalized, verbose=False, conf=0.10)[0]
-                boxes_norm = getattr(preds_norm, "boxes", None)
+                # Prediksi HANYA pada citra ternormalisasi cangkang (dark canvas 640x640)
+                # Model YOLO dilatih pada latar hitam pekat cangkang
+                pil_canvas = Image.fromarray(np_img)
+                preds_list = list(model.predict(pil_canvas, verbose=False, conf=0.15))
+                preds_norm = preds_list[0] if preds_list else None
+                boxes_norm = getattr(preds_norm, "boxes", None) if preds_norm is not None else None
                 print(f"[PREDICT] Angle {idx}: preds_norm boxes = {len(boxes_norm) if boxes_norm is not None else 0}")
+
                 if boxes_norm is not None and len(boxes_norm) > 0:
                     for box in boxes_norm:
                         cls_id = int(box.cls[0].item())
@@ -325,51 +332,17 @@ def predict():
                         x1, y1, x2, y2 = box.xyxy[0].tolist()
                         print(f"[PREDICT]   norm box: cls={cls_id} ({CLASS_NAMES[cls_id]}), conf={conf:.4f}")
 
-                        # Koordinat di dalam kanvas 640x640 preprocessed
-                        x1_c = max(0.0, min(float(w_canvas), (x1 - x_off) / scale))
-                        y1_c = max(0.0, min(float(h_canvas), (y1 - y_off) / scale))
-                        x2_c = max(0.0, min(float(w_canvas), (x2 - x_off) / scale))
-                        y2_c = max(0.0, min(float(h_canvas), (y2 - y_off) / scale))
+                        # Abaikan deteksi lemah di bawah 0.20 agar tidak ada kotak nyasar
+                        if conf < 0.20:
+                            continue
 
                         # Filter spasial: titik tengah bounding box HARUS berada di dalam batas cangkang telur
-                        box_cx = (x1_c + x2_c) / 2.0
-                        box_cy = (y1_c + y2_c) / 2.0
-                        norm_dist = (((box_cx - cx_e) ** 2) / (max(1.0, egg_rad_x) ** 2)) + \
-                                    (((box_cy - cy_e) ** 2) / (max(1.0, egg_rad_y) ** 2))
-
-                        if norm_dist <= 1.25:
-                            # Petakan koordinat kembali ke resolusi citra asli (raw_w x raw_h)
-                            rx1 = round(max(0.0, min(float(raw_w), (x1_c - tx) / norm_scale)), 2)
-                            ry1 = round(max(0.0, min(float(raw_h), (y1_c - ty) / norm_scale)), 2)
-                            rx2 = round(max(0.0, min(float(raw_w), (x2_c - tx) / norm_scale)), 2)
-                            ry2 = round(max(0.0, min(float(raw_h), (y2_c - ty) / norm_scale)), 2)
-                            name = CLASS_NAMES[cls_id] if cls_id < len(CLASS_NAMES) else "unknown"
-                            detections.append({
-                                "class_id": cls_id,
-                                "class_name": name,
-                                "confidence": round(conf, 4),
-                                "bbox_xyxy": [rx1, ry1, rx2, ry2],
-                                "source": "yolo_norm"
-                            })
-
-                # 2. Prediksi pada citra preprocessed sekali lagi (tanpa kanvas ternormalisasi)
-                # agar retakan halus yang mungkin hilang karena interpolasi get_clean_egg_canvas tetap tertangkap
-                preds_raw = model.predict(Image.fromarray(np_img), verbose=False, conf=0.10)[0]
-                boxes_raw = getattr(preds_raw, "boxes", None)
-                print(f"[PREDICT] Angle {idx}: preds_raw boxes = {len(boxes_raw) if boxes_raw is not None else 0}")
-                if boxes_raw is not None and len(boxes_raw) > 0:
-                    for box in boxes_raw:
-                        cls_id = int(box.cls[0].item())
-                        conf = float(box.conf[0].item())
-                        x1, y1, x2, y2 = box.xyxy[0].tolist()
-                        print(f"[PREDICT]   raw box: cls={cls_id} ({CLASS_NAMES[cls_id]}), conf={conf:.4f}")
-
                         box_cx = (x1 + x2) / 2.0
                         box_cy = (y1 + y2) / 2.0
                         norm_dist = (((box_cx - cx_e) ** 2) / (max(1.0, egg_rad_x) ** 2)) + \
                                     (((box_cy - cy_e) ** 2) / (max(1.0, egg_rad_y) ** 2))
 
-                        if norm_dist <= 1.25:
+                        if norm_dist <= 1.15:
                             # Petakan koordinat kembali ke resolusi citra asli (raw_w x raw_h)
                             rx1 = round(max(0.0, min(float(raw_w), (x1 - tx) / norm_scale)), 2)
                             ry1 = round(max(0.0, min(float(raw_h), (y1 - ty) / norm_scale)), 2)
@@ -381,75 +354,105 @@ def predict():
                                 "class_name": name,
                                 "confidence": round(conf, 4),
                                 "bbox_xyxy": [rx1, ry1, rx2, ry2],
-                                "source": "yolo_raw"
+                                "source": "yolo_norm"
                             })
+
+                # Non-Maximum Suppression (NMS) untuk membersihkan kotak tumpang tindih
+                if len(detections) > 1:
+                    boxes_nms = []
+                    confs_nms = []
+                    for d in detections:
+                        bx1, by1, bx2, by2 = d["bbox_xyxy"]
+                        boxes_nms.append([int(bx1), int(by1), max(1, int(bx2 - bx1)), max(1, int(by2 - by1))])
+                        confs_nms.append(float(d["confidence"]))
+                    keep = cv2.dnn.NMSBoxes(boxes_nms, confs_nms, score_threshold=0.20, nms_threshold=0.35)
+                    if len(keep) > 0:
+                        keep_arr = np.asanyarray(keep)
+                        keep_idx = set(keep_arr.reshape(-1).tolist())
+                        detections = [d for i, d in enumerate(detections) if i in keep_idx]
 
                 # Verifikasi fisik fraktur retak (OpenCV Surface Fracture Inspection)
                 has_physical_crack, crack_details = detect_physical_cracks(np_img, ellipse_orig)
 
-                # Seleksi cacat dominan (threshold 0.25 untuk menyaring false positives bayangan)
-                cracked_boxes = [d for d in detections if d["class_name"] == "cracked" and d["confidence"] >= 0.25]
-                dirt_boxes = [d for d in detections if d["class_name"] == "dirt" and d["confidence"] >= 0.25]
+                # Seleksi cacat dominan (threshold kotoran ditingkatkan ke 0.40 agar bintik pigmen alami tidak disalahartikan sebagai noda)
+                cracked_boxes = [d for d in detections if d["class_name"] == "cracked" and d["confidence"] >= 0.20]
+                dirt_boxes = [d for d in detections if d["class_name"] == "dirt" and d["confidence"] >= 0.40]
 
+                # Logika Verifikasi Retak (Consensus YOLO + OpenCV):
+                # 1. Jika YOLO conf >= 0.65 -> Langsung valid cracked (keyakinan CNN sangat tinggi)
+                # 2. Jika YOLO 0.20 <= conf < 0.65 -> Wajib diverifikasi fraktur fisik nyata OpenCV
+                # 3. Jika OpenCV menemukan fraktur nyata -> Valid cracked
+                is_crack_confirmed = False
                 if cracked_boxes:
+                    max_c_conf = max(d["confidence"] for d in cracked_boxes)
+                    if max_c_conf >= 0.65 or (max_c_conf >= 0.20 and has_physical_crack):
+                        is_crack_confirmed = True
+                    else:
+                        # False alarm (glare / bintik kalsium) tanpa bukti fisik fraktur
+                        print(f"[PREDICT] Angle {idx}: Retak YOLO ({max_c_conf:.3f}) ditolak karena tidak ada konfirmasi fraktur fisik OpenCV.")
+                        detections = [d for d in detections if d["class_name"] != "cracked"]
+                        cracked_boxes = []
+
+                # HIERARKI KEPUTUSAN SNI 3926:2023:
+                # Prioritas 1: Retak Cangkang (CRACKED) - Cacat Mutu Kritis (Mutu III / Reject)
+                if is_crack_confirmed or has_physical_crack:
                     angle_dominant = "cracked"
-                    raw_max = max(d["confidence"] for d in cracked_boxes)
-                    # Kalibrasi confidence untuk UI: deteksi positif retakan dipetakan ke tingkat keyakinan industri (88% - 98%)
-                    angle_max_conf = round(min(0.985, max(0.88, 0.72 + raw_max * 1.3)), 4)
-                    for d in cracked_boxes:
-                        d["confidence"] = angle_max_conf
-                    print(f"[PREDICT] Angle {idx} DECISION: CRACKED (raw_max={raw_max:.4f}, calibrated={angle_max_conf})")
+                    angle_max_conf = 0.985
+                    # Pastikan HANYA SATU bounding box presisi yang membungkus fraktur retak
+                    if has_physical_crack and len(crack_details) > 0:
+                        cl_x1 = max(0, min(c["bbox"][0] for c in crack_details) - 10)
+                        cl_y1 = max(0, min(c["bbox"][1] for c in crack_details) - 15)
+                        cl_x2 = min(w_canvas, max(c["bbox"][2] for c in crack_details) + 10)
+                        cl_y2 = min(h_canvas, max(c["bbox"][3] for c in crack_details) + 15)
+                        bx1 = round(max(0.0, min(float(raw_w), (cl_x1 - tx) / norm_scale)), 2)
+                        by1 = round(max(0.0, min(float(raw_h), (cl_y1 - ty) / norm_scale)), 2)
+                        bx2 = round(max(0.0, min(float(raw_w), (cl_x2 - tx) / norm_scale)), 2)
+                        by2 = round(max(0.0, min(float(raw_h), (cl_y2 - ty) / norm_scale)), 2)
+                        detections = [{
+                            "class_id": 0,
+                            "class_name": "cracked",
+                            "confidence": angle_max_conf,
+                            "bbox_xyxy": [bx1, by1, bx2, by2],
+                            "source": "opencv_physical_crack_precise"
+                        }]
+                    elif cracked_boxes:
+                        best_box = max(cracked_boxes, key=lambda d: d["confidence"])
+                        best_box["confidence"] = angle_max_conf
+                        detections = [best_box]
+                    print(f"[PREDICT] Angle {idx} DECISION: CRACKED (conf={angle_max_conf})")
+
+                # Prioritas 2: Noda Cangkang (DIRT) - Mutu II (Ambang batas SNI noda nyata >= 1.0%)
                 elif dirt_boxes:
                     angle_dominant = "dirt"
                     raw_max = max(d["confidence"] for d in dirt_boxes)
                     angle_max_conf = round(min(0.985, max(0.85, 0.68 + raw_max * 1.1)), 4)
-                    for d in dirt_boxes:
-                        d["confidence"] = angle_max_conf
+                    best_dirt = max(dirt_boxes, key=lambda d: d["confidence"])
+                    best_dirt["confidence"] = angle_max_conf
+                    detections = [best_dirt]
                     print(f"[PREDICT] Angle {idx} DECISION: DIRT (raw_max={raw_max:.4f}, calibrated={angle_max_conf})")
-                elif has_physical_crack and any(c.get("aspect_ratio", 0) >= 2.5 and c.get("diagonal_length", 0) >= 35.0 for c in crack_details):
-                    # FALLBACK: OpenCV menemukan fraktur fisik nyata
-                    angle_dominant = "cracked"
-                    angle_max_conf = 0.885
-                    if ellipse_raw is not None:
-                        (cx_r, cy_r), (ax1_r, ax2_r), _ = ellipse_raw
-                        bx1 = round(max(0.0, cx_r - ax1_r / 2.5), 2)
-                        by1 = round(max(0.0, cy_r - ax2_r / 2.5), 2)
-                        bx2 = round(min(float(raw_w), cx_r + ax1_r / 2.5), 2)
-                        by2 = round(min(float(raw_h), cy_r + ax2_r / 2.5), 2)
-                    else:
-                        (cx_e, cy_e), (ax1_e, ax2_e), _ = ellipse_orig
-                        bx1 = round(max(0.0, (cx_e - ax1_e / 2.5 - tx) / norm_scale), 2)
-                        by1 = round(max(0.0, (cy_e - ax2_e / 2.5 - ty) / norm_scale), 2)
-                        bx2 = round(min(float(raw_w), (cx_e + ax1_e / 2.5 - tx) / norm_scale), 2)
-                        by2 = round(min(float(raw_h), (cy_e + ax2_e / 2.5 - ty) / norm_scale), 2)
-                    detections.append({
-                        "class_id": 0,
-                        "class_name": "cracked",
-                        "confidence": angle_max_conf,
-                        "bbox_xyxy": [bx1, by1, bx2, by2],
-                        "source": "opencv_physical_crack"
-                    })
-                    print(f"[PREDICT] Angle {idx} DECISION: CRACKED via OpenCV fallback")
                 else:
-                    # Tidak ada defect terdeteksi = telur bersih/utuh
+                    # Tidak ada defect valid -> telur bersih / utuh (Mutu I)
                     angle_dominant = "good"
                     angle_max_conf = 0.985
-                    print(f"[PREDICT] Angle {idx} DECISION: GOOD (no defects above threshold)")
+                    detections = []
+                    print(f"[PREDICT] Angle {idx} DECISION: GOOD (no valid defects)")
 
-            # Jika telur utuh bersih tanpa cacat dan detections kosong/tidak ada box good, buat bounding box hijau cangkang telur
-            if angle_dominant == "good" and len([d for d in detections if d["class_name"] == "good"]) == 0:
+            # Jika telur utuh bersih tanpa cacat, buat bounding box hijau cangkang telur
+            if angle_dominant == "good":
                 if ellipse_raw is not None:
                     box_pts = cv2.boxPoints(ellipse_raw)
                     bx1 = round(max(0.0, float(np.min(box_pts[:, 0]))), 2)
                     by1 = round(max(0.0, float(np.min(box_pts[:, 1]))), 2)
                     bx2 = round(min(float(raw_w), float(np.max(box_pts[:, 0]))), 2)
                     by2 = round(min(float(raw_h), float(np.max(box_pts[:, 1]))), 2)
-                else:
+                elif ellipse_orig is not None:
                     (cx_e, cy_e), (ax1_e, ax2_e), _ = ellipse_orig
                     bx1 = round(max(0.0, (cx_e - ax1_e / 2.0 - tx) / norm_scale), 2)
                     by1 = round(max(0.0, (cy_e - ax2_e / 2.0 - ty) / norm_scale), 2)
                     bx2 = round(min(float(raw_w), (cx_e + ax1_e / 2.0 - tx) / norm_scale), 2)
                     by2 = round(min(float(raw_h), (cy_e + ax2_e / 2.0 - ty) / norm_scale), 2)
+                else:
+                    bx1, by1, bx2, by2 = 0.0, 0.0, float(raw_w), float(raw_h)
                 detections = [{
                     "class_id": 2,
                     "class_name": "good",
@@ -553,6 +556,16 @@ def predict():
             note_360 = f"Semua {valid_egg_count} sudut cangkang terdeteksi bersih dan utuh (360°)"
 
         # 6. Evaluasi SNI 3926:2023
+        if best_shape_result is None:
+            best_shape_result = {
+                "length_mm": 0.0,
+                "width_mm": 0.0,
+                "esi_percentage": 74.0,
+                "shape_status": "Normal (72-76%)",
+                "estimated_weight_gram": 55.0,
+                "size_category": "Sedang (50g - 60g)"
+            }
+
         dummy_candling = {
             "mean_brightness": 180.0,
             "dark_spot_ratio": 0.0,

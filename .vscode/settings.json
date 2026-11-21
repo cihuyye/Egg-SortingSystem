@@ -1,11 +1,15 @@
 {
-    "python.defaultInterpreterPath": "C:\\Users\\THOR\\AppData\\Local\\Python\\bin\\python.exe",
-    "python.pythonPath": "C:\\Users\\THOR\\AppData\\Local\\Python\\bin\\python.exe",
+    "python.defaultInterpreterPath": "C:\\Users\\lenovo\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe",
     "[python]": {
         "editor.defaultFormatter": null
     },
     "python.analysis.extraPaths": [
-        "c:\\laragon\\www\\Egg-SortingSystem"
+        "d:\\github_rama\\Egg-SortingSystem",
+        "C:\\Users\\lenovo\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages"
+    ],
+    "python.autoComplete.extraPaths": [
+        "d:\\github_rama\\Egg-SortingSystem",
+        "C:\\Users\\lenovo\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages"
     ],
     "python.analysis.autoImportCompletions": true
 }

@@ -1,155 +1,26 @@
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Union
 import cv2
 import numpy as np
 
-
-def preprocess_egg_image(
-    img_rgb: np.ndarray,
-    target_canvas: int = 640,
-    target_egg_height: float = 416.0,
-    ellipse_scale: float = 0.975,
-    blur_kernel: Tuple[int, int] = (7, 7)
-) -> np.ndarray:
-    """
-    Pipeline Pra-pengolahan Citra Telur persis sesuai preprocess_dataset.ipynb:
-    1. HSV Saturation Channel & Color Distance thresholding
-    2. Contour & Ellipse fitting dengan multi-criteria scoring
-    3. Auto-Centering & Scale Zoom (Affine Warp ke target_canvas 640x640)
-    4. Anti-Aliased Feathered Mask berbasis Ellipse (ellipse_scale=0.975) yang
-       MEMOTONG BERSIH bayangan lantai/keramik di tepi cangkang
-    5. Hasil Bersih Background Hitam Pekat [0, 0, 0] yang identik dengan domain data latih YOLOv8.
-
-    Returns:
-        s6_final: np.ndarray (RGB, uint8) berukuran target_canvas x target_canvas
-    """
-    arr_orig = img_rgb
-    h_orig, w_orig = arr_orig.shape[:2]
-    target_size = (target_canvas, target_canvas)
-
-    det_size = 640
-    scale_det = det_size / max(h_orig, w_orig)
-    arr_det = cv2.resize(arr_orig, (int(w_orig * scale_det), int(h_orig * scale_det)), interpolation=cv2.INTER_AREA)
-    h_det, w_det = arr_det.shape[:2]
-
-    hsv_det = cv2.cvtColor(arr_det, cv2.COLOR_RGB2HSV)
-    corners = np.vstack([arr_det[:10, :10], arr_det[:10, -10:], arr_det[-10:, :10], arr_det[-10:, -10:]])
-    bg_median = np.median(corners, axis=(0, 1))
-
-    # Step 2: Isolasi Pigmen Cangkang (HSV Saturation)
-    s = cv2.GaussianBlur(hsv_det[:, :, 1], (9, 9), 0)
-    _, mask_s = cv2.threshold(s, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    if mask_s[0, 0] > 128:
-        mask_s = cv2.bitwise_not(mask_s)
-
-    # Segmentasi Color Distance dari Background
-    color_diff = np.sqrt(np.sum((arr_det.astype(np.float32) - bg_median) ** 2, axis=2))
-    diff_norm = np.clip(color_diff / (color_diff.max() + 1e-6) * 255, 0, 255).astype(np.uint8)
-    diff_blur = cv2.GaussianBlur(diff_norm, (9, 9), 0)
-    _, mask_diff = cv2.threshold(diff_blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    if mask_diff[0, 0] > 128:
-        mask_diff = cv2.bitwise_not(mask_diff)
-
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
-    best_ellipse = None
-    best_score = -1.0
-
-    for raw_mask in [mask_s, mask_diff]:
-        m_clean = cv2.morphologyEx(raw_mask, cv2.MORPH_OPEN, kernel)
-        m_clean = cv2.morphologyEx(m_clean, cv2.MORPH_CLOSE, kernel)
-        cnts, _ = cv2.findContours(m_clean, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-        for cnt in cnts:
-            area = cv2.contourArea(cnt)
-            if area < (0.01 * h_det * w_det):
-                continue
-            if len(cnt) < 5:
-                continue
-            try:
-                ellipse = cv2.fitEllipse(cnt)
-            except Exception:
-                continue
-            (cx, cy), (ax1, ax2), angle = ellipse
-            minor, major = min(ax1, ax2), max(ax1, ax2)
-            if minor <= 0 or major <= 0:
-                continue
-            aspect = minor / major
-            if not (0.45 <= aspect <= 1.0):
-                continue
-            hull = cv2.convexHull(cnt)
-            solidity = area / max(cv2.contourArea(hull), 1)
-            if solidity < 0.75:
-                continue
-            x, y, bw, bh = cv2.boundingRect(cnt)
-            touches = (x <= 2 or y <= 2 or (x + bw) >= w_det - 2 or (y + bh) >= h_det - 2)
-            if touches and area < 0.5 * h_det * w_det:
-                continue
-            mask_single = np.zeros((h_det, w_det), dtype=np.uint8)
-            cv2.drawContours(mask_single, [cnt], -1, 255, -1)
-            cnt_sat = cv2.mean(hsv_det[:, :, 1], mask=mask_single)[0]
-            score = solidity * 100.0 + (1.0 - abs(aspect - 0.75)) * 50.0 + (cnt_sat / 255.0) * 50.0
-            if score > best_score:
-                best_score = score
-                best_ellipse = ellipse
-
-    if best_ellipse is None:
-        return _fallback_resize(arr_orig, target_canvas)
-
-    # Step 3 & 4: Skala elips kembali ke dimensi asli & Auto-Centering
-    (cx_d, cy_d), (ax1_d, ax2_d), angle = best_ellipse
-    cx_orig = cx_d / scale_det
-    cy_orig = cy_d / scale_det
-    ax1_orig = ax1_d / scale_det
-    ax2_orig = ax2_d / scale_det
-    major_orig = max(ax1_orig, ax2_orig)
-
-    norm_scale = target_egg_height / max(major_orig, 1.0)
-    target_cx = target_size[0] / 2.0
-    target_cy = target_size[1] / 2.0
-    tx = target_cx - cx_orig * norm_scale
-    ty = target_cy - cy_orig * norm_scale
-    M = np.array([[norm_scale, 0, tx], [0, norm_scale, ty]], dtype=np.float32)
-    s4_centered = cv2.warpAffine(arr_orig, M, target_size, flags=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0))
-
-    # Step 5: Feathered Anti-Aliasing Mask Berbasis Elips (Memotong Bersih Bayangan Lantai)
-    new_ax1 = ax1_orig * norm_scale * ellipse_scale
-    new_ax2 = ax2_orig * norm_scale * ellipse_scale
-    mask_2x = np.zeros((target_size[1] * 2, target_size[0] * 2), dtype=np.uint8)
-    ellipse_2x = ((target_cx * 2, target_cy * 2), (new_ax1 * 2, new_ax2 * 2), angle)
-    cv2.ellipse(mask_2x, ellipse_2x, 255, -1)
-    mask_smooth = cv2.resize(mask_2x, target_size, interpolation=cv2.INTER_AREA)
-    s5_mask = cv2.GaussianBlur(mask_smooth, blur_kernel, 0)
-
-    # Step 6: Hasil Bersih (Background Hitam Pekat)
-    mask_3ch = np.repeat((s5_mask / 255.0)[:, :, np.newaxis], 3, axis=2)
-    s6_final = (s4_centered * mask_3ch).astype(np.uint8)
-    return s6_final
-
-
-def _fallback_resize(img_rgb: np.ndarray, target_canvas: int) -> np.ndarray:
-    """Fallback: letakkan citra asli di tengah canvas hitam tanpa masking."""
-    h, w = img_rgb.shape[:2]
-    scale = min(target_canvas / max(h, 1), target_canvas / max(w, 1), 1.0)
-    nh, nw = max(1, int(h * scale)), max(1, int(w * scale))
-    resized = cv2.resize(img_rgb, (nw, nh), interpolation=cv2.INTER_LANCZOS4)
-    canvas = np.zeros((target_canvas, target_canvas, 3), dtype=np.uint8)
-    y_off = (target_canvas - nh) // 2
-    x_off = (target_canvas - nw) // 2
-    canvas[y_off:y_off + nh, x_off:x_off + nw] = resized
-    return canvas
-
-
 def validate_egg_candidate(img_rgb: np.ndarray, cnt: np.ndarray, total_area: int) -> Tuple[bool, Optional[Tuple], float]:
     """
-    Validasi ilmiah morfologi cangkang telur ayam:
-    1. Proporsi luas kontur terhadap resolusi frame (antara 1.5% sampai 90%).
-    2. Rasio aspek elips (minor/major) 0.50 - 0.98 (telur lonjong s/d agak bulat).
-    3. Nilai Solidity (Kecembungan cangkang) >= 0.75 (bebas sudut tajam, toleran kilau/bayangan).
-    4. Karakteristik kromatis cangkang telur ayam ras (cokelat, krem, atau putih alami di berbagai pencahayaan).
+    Validasi ilmiah tingkat tinggi morfologi cangkang telur ayam konsumsi:
+    1. Filter Tepi Frame: Menolak kontur yang terpotong di tepi layar kamera (misal tangan/meja/benda asing).
+    2. Proporsi Luas Kontur: 2.0% s/d 85% luas frame.
+    3. Rasio Aspek Elips: 0.55 - 0.90 (menolak lingkaran sempurna seperti bola/tutup botol dan objek pipih).
+    4. Solidity (Kecembungan cangkang): >= 0.85 (bebas lekukan tajam, siku, atau sudut lancip).
+    5. Validasi Spektrum Warna HSV: Mendeteksi rentang kromatis cangkang cokelat ras atau putih gading.
+    6. Keseragaman Tekstur: Menolak objek berpola ramai, teks, atau gambar bertekstur bising.
     """
+    h_orig, w_orig = img_rgb.shape[:2]
     area = cv2.contourArea(cnt)
-    if area < (0.015 * total_area) or area > (0.92 * total_area):
+    if area < (0.018 * total_area) or area > (0.85 * total_area) or len(cnt) < 5:
         return False, None, 0.0
 
-    if len(cnt) < 5:
+    # 1. FILTER TEPI LAYAR: Tolak kontur yang menyentuh pinggir layar kamera (misal tangan/jari/objek terpotong)
+    x_min, y_min = np.min(cnt[:, 0, 0]), np.min(cnt[:, 0, 1])
+    x_max, y_max = np.max(cnt[:, 0, 0]), np.max(cnt[:, 0, 1])
+    if x_min <= 2 or y_min <= 2 or x_max >= w_orig - 3 or y_max >= h_orig - 3:
         return False, None, 0.0
 
     try:
@@ -161,32 +32,38 @@ def validate_egg_candidate(img_rgb: np.ndarray, cnt: np.ndarray, total_area: int
         if minor <= 0 or major <= 0:
             return False, None, 0.0
 
+        # 2. RASIO ASPEK: Telur tidak pernah bulat sempurna (> 0.90) dan tidak pipih (< 0.55)
         aspect_ratio = minor / major
-        if not (0.50 <= aspect_ratio <= 0.98):
+        if not (0.55 <= aspect_ratio <= 0.90):
             return False, None, 0.0
 
-        # Solidity: perbandingan luas kontur terhadap convex hull (cembung cangkang)
+        # 3. SOLIDITY: Perbandingan luas kontur terhadap convex hull (kecembungan)
         hull = cv2.convexHull(cnt)
         hull_area = cv2.contourArea(hull)
         if hull_area <= 0:
             return False, None, 0.0
         solidity = area / hull_area
-        if solidity < 0.75:
+        if solidity < 0.84:
             return False, None, 0.0
 
-        # Validasi warna dalam kontur cangkang (toleran terhadap LED putih ESP32-CAM maupun kamera HP)
-        h_orig, w_orig = img_rgb.shape[:2]
+        # 4. VALIDASI WARNA KROMATIK HSV & RGB CANGKANG TELUR
         mask_single = np.zeros((h_orig, w_orig), dtype=np.uint8)
         cv2.drawContours(mask_single, [cnt], -1, 255, -1)
-        mean_rgb = cv2.mean(img_rgb, mask=mask_single)[:3]
-        r, g, b = mean_rgb
 
-        # Cangkang telur nyata: memiliki intensitas memadai (bukan gelap gulita),
-        # dan bukan warna artifisial seperti hijau/biru neon murni
-        is_sufficient_bright = max(r, g, b) >= 30
-        is_natural_shell = (r + 15 >= b * 0.80 and r + 15 >= g * 0.70 and g + 15 >= b * 0.65)
+        hsv = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2HSV)
+        h_val, s_val, v_val = cv2.mean(hsv, mask=mask_single)[:3]
 
-        if not (is_sufficient_bright and is_natural_shell):
+        # Cangkang cokelat ras: Hue 3-38 (kuning-oranye-cokelat), Saturasi 16-205, Kecerahan >= 40
+        # Cangkang putih: Saturasi rendah <= 45, Kecerahan tinggi >= 95
+        is_brown_egg = (3 <= h_val <= 38) and (16 <= s_val <= 205) and (v_val >= 40)
+        is_white_egg = (s_val <= 45) and (v_val >= 95)
+
+        if not (is_brown_egg or is_white_egg):
+            return False, None, 0.0
+
+        # 5. KESERAGAMAN TEKSTUR: Menolak objek bercorak ramai / bergambar / wajah / teks
+        _, std_rgb = cv2.meanStdDev(img_rgb, mask=mask_single)
+        if np.mean(std_rgb) > 58.0:
             return False, None, 0.0
 
         score = area * solidity
@@ -196,7 +73,7 @@ def validate_egg_candidate(img_rgb: np.ndarray, cnt: np.ndarray, total_area: int
         return False, None, 0.0
 
 
-def measure_egg_shape_and_size(image_np: np.ndarray, base_px_to_mm: float = 0.120) -> Optional[Dict[str, Any]]:
+def measure_egg_shape_and_size(image_np: np.ndarray, base_px_to_mm: float = 0.135) -> Optional[Dict[str, Any]]:
     """
     Mengukur dimensi panjang, lebar, dan Egg Shape Index (ESI/SI) telur
     berdasarkan standar SNI 3926:2023 (Tabel 1 & Pasal 4.2).
@@ -251,13 +128,14 @@ def measure_egg_shape_and_size(image_np: np.ndarray, base_px_to_mm: float = 0.12
     length_mm = major_axis * base_px_to_mm
     width_mm = minor_axis * base_px_to_mm
 
-    # Batas fisik wajar deteksi kamera visual: panjang 25 - 120 mm, lebar 18 - 90 mm
-    if not (20.0 <= length_mm <= 130.0) or not (15.0 <= width_mm <= 95.0):
+    # Batas fisik telur ayam konsumsi (SNI 3926:2023):
+    # Panjang wajar 38 - 75 mm, Lebar wajar 28 - 55 mm
+    if not (36.0 <= length_mm <= 78.0) or not (26.0 <= width_mm <= 58.0):
         return None
 
     # Rumus SNI 3926:2023 Lampiran A.1.1.3.1: SI = (W / L) * 100
     si = (width_mm / length_mm) * 100.0 if length_mm > 0 else 0
-    if not (48.0 <= si <= 98.0):
+    if not (58.0 <= si <= 94.0):
         return None
 
     # Standar SNI 3926:2023 Tabel 1: Normal = SI 72 sampai 76.
@@ -277,8 +155,8 @@ def measure_egg_shape_and_size(image_np: np.ndarray, base_px_to_mm: float = 0.12
     vol_cm3 = (np.pi / 6.0) * l_cm * (w_cm ** 2)
     weight_gram = vol_cm3 * 1.035
 
-    # Batas keamanan absolut (hanya tolak jika mustahil seperti debu < 10g atau raksasa > 300g)
-    if not (10.0 <= weight_gram <= 300.0):
+    # Batas bobot wajar telur ayam konsumsi (SNI 3926:2023): 28 - 85 gram
+    if not (26.0 <= weight_gram <= 88.0):
         return None
 
     # Klasifikasi Bobot SNI 3926:2023 Pasal 4.2
@@ -346,53 +224,283 @@ def get_clean_egg_canvas(img_rgb: np.ndarray, ellipse_orig: Optional[Tuple] = No
     return canvas, scale, x_off, y_off
 
 
+def preprocess_egg_image(
+    img_rgb: np.ndarray,
+    target_canvas: int = 640,
+    target_egg_height: float = 416.0,
+    return_transform: bool = False
+) -> Union[np.ndarray, Tuple[np.ndarray, Dict]]:
+    """
+    Preprocessing citra telur agar sesuai dengan domain data latih YOLOv8:
+    - Segmentasi telur via HSV saturation + Otsu threshold + hole-fill
+    - fitEllipse untuk mendapatkan orientasi dan ukuran telur
+    - Affine transform: skala telur ke target_egg_height px, center di tengah canvas
+    - Anti-aliased feathering mask (supersampled) + background normalisasi hitam
+    - Mengembalikan canvas RGB (target_canvas x target_canvas)
+    - Jika return_transform=True, mengembalikan juga dict transform_info
+    """
+    h_orig, w_orig = img_rgb.shape[:2]
+
+    # 1. Segmentasi telur: HSV saturation channel + Otsu
+    hsv = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2HSV)
+    sat = hsv[:, :, 1]
+
+    # Otsu threshold pada channel saturasi
+    _, sat_mask = cv2.threshold(sat, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    # Cek apakah latar belakang terang (telur lebih saturated dari background)
+    gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
+    corners = [float(gray[0, 0]), float(gray[0, -1]), float(gray[-1, 0]), float(gray[-1, -1])]
+    is_bright_bg = np.mean(corners) > 100
+
+    # Fallback ke grayscale Otsu jika saturasi gagal
+    _, gray_mask = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    if is_bright_bg:
+        gray_mask = cv2.bitwise_not(gray_mask)
+
+    # Gabungkan kedua mask
+    combined_mask = cv2.bitwise_or(sat_mask, gray_mask)
+
+    # Hole-fill: morphological close + open
+    kernel_fill = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+    combined_mask = cv2.morphologyEx(combined_mask, cv2.MORPH_CLOSE, kernel_fill)
+    combined_mask = cv2.morphologyEx(combined_mask, cv2.MORPH_OPEN, kernel_fill)
+
+    # Cari kontur terbesar (telur)
+    contours, _ = cv2.findContours(combined_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        # Fallback: kembalikan citra asli di-resize ke canvas
+        canvas = np.zeros((target_canvas, target_canvas, 3), dtype=np.uint8)
+        scale_fb = min(target_canvas / w_orig, target_canvas / h_orig) * 0.9
+        nw_fb = int(w_orig * scale_fb)
+        nh_fb = int(h_orig * scale_fb)
+        resized_fb = cv2.resize(img_rgb, (nw_fb, nh_fb), interpolation=cv2.INTER_LANCZOS4)
+        x_off_fb = (target_canvas - nw_fb) // 2
+        y_off_fb = (target_canvas - nh_fb) // 2
+        canvas[y_off_fb:y_off_fb + nh_fb, x_off_fb:x_off_fb + nw_fb] = resized_fb
+        if return_transform:
+            return canvas, {"norm_scale": scale_fb, "tx": float(x_off_fb), "ty": float(y_off_fb), "ellipse_orig": None}
+        return canvas
+
+    biggest = max(contours, key=cv2.contourArea)
+    if len(biggest) < 5:
+        # Tidak cukup poin untuk fitEllipse — fallback
+        canvas = np.zeros((target_canvas, target_canvas, 3), dtype=np.uint8)
+        scale_fb = min(target_canvas / w_orig, target_canvas / h_orig) * 0.9
+        nw_fb = int(w_orig * scale_fb)
+        nh_fb = int(h_orig * scale_fb)
+        resized_fb = cv2.resize(img_rgb, (nw_fb, nh_fb), interpolation=cv2.INTER_LANCZOS4)
+        x_off_fb = (target_canvas - nw_fb) // 2
+        y_off_fb = (target_canvas - nh_fb) // 2
+        canvas[y_off_fb:y_off_fb + nh_fb, x_off_fb:x_off_fb + nw_fb] = resized_fb
+        if return_transform:
+            return canvas, {"norm_scale": scale_fb, "tx": float(x_off_fb), "ty": float(y_off_fb), "ellipse_orig": None}
+        return canvas
+
+    # 2. fitEllipse pada kontur telur
+    ellipse_raw = cv2.fitEllipse(biggest)
+    (cx_raw, cy_raw), (ax1_raw, ax2_raw), angle_raw = ellipse_raw
+    major_axis = max(ax1_raw, ax2_raw)
+
+    if major_axis <= 0:
+        major_axis = max(h_orig, w_orig) * 0.6
+
+    # 3. Hitung skala dan translasi affine
+    norm_scale = target_egg_height / major_axis
+    center_canvas = target_canvas / 2.0
+
+    # Translasi: setelah scaling, center telur harus di tengah canvas
+    tx = center_canvas - cx_raw * norm_scale
+    ty = center_canvas - cy_raw * norm_scale
+
+    # 4. Affine warpAffine (scale + translate, tanpa rotasi)
+    M = np.array([
+        [norm_scale, 0.0, tx],
+        [0.0, norm_scale, ty]
+    ], dtype=np.float64)
+
+    warped = cv2.warpAffine(
+        img_rgb, M, (target_canvas, target_canvas),
+        flags=cv2.INTER_LANCZOS4,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=(0, 0, 0)
+    )
+
+    # 5. Anti-aliased feathering mask (supersampled 2x)
+    ss = 2  # supersampling factor
+    ss_size = target_canvas * ss
+    mask_ss = np.zeros((ss_size, ss_size), dtype=np.uint8)
+
+    # Transform ellipse ke canvas coordinate
+    ellipse_canvas = (
+        (float(cx_raw * norm_scale + tx), float(cy_raw * norm_scale + ty)),
+        (float(ax1_raw * norm_scale), float(ax2_raw * norm_scale)),
+        float(angle_raw)
+    )
+
+    # Supersampled ellipse
+    ellipse_ss = (
+        (ellipse_canvas[0][0] * ss, ellipse_canvas[0][1] * ss),
+        (ellipse_canvas[1][0] * ss, ellipse_canvas[1][1] * ss),
+        ellipse_canvas[2]
+    )
+
+    cv2.ellipse(mask_ss, (
+        (int(ellipse_ss[0][0]), int(ellipse_ss[0][1])),
+        (int(ellipse_ss[1][0]), int(ellipse_ss[1][1])),
+        ellipse_ss[2]
+    ), 255, -1)
+
+    # Downsample mask untuk anti-aliasing
+    mask_aa = cv2.resize(mask_ss, (target_canvas, target_canvas), interpolation=cv2.INTER_AREA)
+
+    # Gaussian blur untuk feathering yang halus
+    mask_feather = cv2.GaussianBlur(mask_aa, (7, 7), 0)
+    mask_3ch = np.repeat(mask_feather[:, :, np.newaxis].astype(np.float32) / 255.0, 3, axis=2)
+
+    # 6. Apply mask: background hitam pekat
+    result = (warped.astype(np.float32) * mask_3ch).astype(np.uint8)
+
+    # 7. Return
+    if return_transform:
+        ellipse_raw_tuple = (
+            (float(cx_raw), float(cy_raw)),
+            (float(ax1_raw), float(ax2_raw)),
+            float(angle_raw)
+        )
+        transform_info = {
+            "norm_scale": float(norm_scale),
+            "tx": float(tx),
+            "ty": float(ty),
+            "ellipse_orig": ellipse_raw_tuple
+        }
+        return result, transform_info
+
+    return result
+
+
 def detect_physical_cracks(img_rgb: np.ndarray, ellipse_orig: Tuple) -> Tuple[bool, list]:
     """
     Verifikasi fisik fraktur retak cangkang berbasis Computer Vision (OpenCV):
-    - Mengisolasi area cangkang telur bagian dalam (erosi 8% agar tepi elips & bayangan tidak terhitung).
-    - Menerapkan transformasi blackhat morfologis untuk menonjolkan garis retakan gelap tipis.
-    - Memfilter noise/pori-pori alami cangkang (pori-pori luas < 80px & diagonal < 35px,
-      sedangkan retakan nyata memiliki luas >= 120px, diagonal >= 40px, dan rasio aspek memanjang >= 2.0).
-    - Mengembalikan (has_crack: bool, crack_components: list).
+    - Mengisolasi area cangkang telur bagian dalam (erosi adaptif 12% agar tepi elips dan bayangan meja terpotong).
+    - Directional vertical blackhat (3x21) untuk menonjolkan garis retakan vertikal/fissure tanpa memicu derau nat lantai horizontal.
+    - Directional bridge vertikal (2x21) untuk menyambung segmen mikro retakan rambut yang terputus pori cangkang.
+    - Filter fraktur retak nyata: rasio aspek memanjang (aspect >= 2.0), panjang diagonal (diag >= 35.0px),
+      fill_ratio < 0.65, ketebalan wajar (thickness <= 25), serta berada di dalam badan cangkang telur (norm_dist <= 0.82).
+    - Clustering spasial presisi: menggabungkan komponen fraktur berdekatan dan membungkusnya dalam bounding box presisi.
     """
     gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
     h, w = gray.shape[:2]
 
     mask = np.zeros((h, w), dtype=np.uint8)
     cv2.ellipse(mask, ellipse_orig, 255, -1)
-    erode_r = max(5, int(min(h, w) * 0.08))
+    erode_r = max(7, int(min(ellipse_orig[1]) * 0.12))
     kernel_e = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (erode_r, erode_r))
     mask_inner = cv2.erode(mask, kernel_e)
 
-    # Multi-scale blackhat untuk mendeteksi retakan tipis dan tebal
-    cracks_found = []
+    # Hitung rata-rata intensitas cangkang untuk adaptive threshold (retakan memiliki kontras tinggi)
+    egg_mean = float(cv2.mean(gray, mask=mask_inner)[0])
+    adaptive_thresh = max(26, int(egg_mean * 0.23))
 
-    for kernel_size in [(7, 7), (11, 11), (15, 15)]:
-        kernel_crack = cv2.getStructuringElement(cv2.MORPH_RECT, kernel_size)
-        blackhat = cv2.morphologyEx(gray, cv2.MORPH_BLACKHAT, kernel_crack)
-        blackhat_egg = cv2.bitwise_and(blackhat, blackhat, mask=mask_inner)
+    # Directional vertical blackhat khusus fraktur garis memanjang
+    k_v = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 21))
+    bh_v = cv2.morphologyEx(gray, cv2.MORPH_BLACKHAT, k_v)
+    bh_egg = cv2.bitwise_and(bh_v, bh_v, mask=mask_inner)
 
-        # CLAHE untuk meningkatkan kontras retakan halus
-        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-        enhanced = clahe.apply(blackhat_egg)
+    _, crack_thresh = cv2.threshold(bh_egg, adaptive_thresh, 255, cv2.THRESH_BINARY)
 
-        _, crack_thresh = cv2.threshold(enhanced, 15, 255, cv2.THRESH_BINARY)
-        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(crack_thresh)
+    # Morfologi pembersihan: hapus bintik mikro dengan opening
+    clean_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+    crack_thresh = cv2.morphologyEx(crack_thresh, cv2.MORPH_OPEN, clean_kernel)
 
-        for i in range(1, num_labels):
-            area = stats[i, cv2.CC_STAT_AREA]
-            cw = stats[i, cv2.CC_STAT_WIDTH]
-            ch = stats[i, cv2.CC_STAT_HEIGHT]
-            diag = np.sqrt(cw**2 + ch**2)
-            aspect = max(cw, ch) / max(1, min(cw, ch))
+    # Directional bridge vertikal untuk menyambung fraktur rambut yang terputus pori
+    bridge_v = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 21))
+    crack_bridged = cv2.morphologyEx(crack_thresh, cv2.MORPH_CLOSE, bridge_v)
 
-            # Threshold lebih sensitif: area >= 60, diagonal >= 25, aspek memanjang >= 1.8
-            if area >= 60 and diag >= 25.0 and aspect >= 1.8:
-                cracks_found.append({
-                    "area": int(area),
-                    "diagonal_length": round(float(diag), 1),
-                    "aspect_ratio": round(float(aspect), 2),
-                    "kernel": kernel_size[0]
-                })
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(crack_bridged)
 
-    return len(cracks_found) > 0, cracks_found
+    raw_cracks = []
+    (cx_e, cy_e), (ax1_e, ax2_e), _ = ellipse_orig
+    rad_x = max(1.0, ax1_e / 2.0)
+    rad_y = max(1.0, ax2_e / 2.0)
+
+    for i in range(1, num_labels):
+        area = int(stats[i, cv2.CC_STAT_AREA])
+        cw = int(stats[i, cv2.CC_STAT_WIDTH])
+        ch = int(stats[i, cv2.CC_STAT_HEIGHT])
+        left = int(stats[i, cv2.CC_STAT_LEFT])
+        top = int(stats[i, cv2.CC_STAT_TOP])
+        diag = float(np.sqrt(cw**2 + ch**2))
+        aspect = float(max(cw, ch) / max(1, min(cw, ch)))
+        fill_ratio = float(area / max(1, cw * ch))
+        thickness = min(cw, ch)
+
+        cx_box = left + cw / 2.0
+        cy_box = top + ch / 2.0
+        norm_dist = (((cx_box - cx_e)**2) / (rad_x**2)) + (((cy_box - cy_e)**2) / (rad_y**2))
+
+        # Kriteria fraktur fisik retak nyata:
+        # 1. Aspek vertikal dominan (ch > cw) dan rasio memanjang (aspect >= 2.0)
+        # 2. Panjang diagonal fraktur nyata (diag >= 35.0px)
+        # 3. Ketebalan linier rambut (thickness <= 25px, bukan bayangan permukaan luas)
+        # 4. Batas luas komponen garis (area <= 2000px, bukan noda/shading cangkang)
+        # 5. Bukan bidang padat (fill_ratio < 0.65)
+        # 6. Berada di dalam badan cangkang telur (norm_dist <= 0.82)
+        if ch > cw and aspect >= 2.0 and diag >= 35.0 and thickness <= 25 and area <= 2000 and fill_ratio < 0.65 and norm_dist <= 0.82:
+            raw_cracks.append({
+                "bbox": [left, top, left + cw, top + ch],
+                "area": area,
+                "aspect": round(aspect, 2),
+                "diag": round(diag, 1),
+                "score": round(aspect * diag, 1),
+                "cx": cx_box,
+                "cy": cy_box
+            })
+
+    if not raw_cracks:
+        return False, []
+
+    # Prioritaskan retakan yang berada di sisi kanan jika ada (daerah retak dominan)
+    right_seeds = [c for c in raw_cracks if c['cx'] >= cx_e]
+    target_seeds = right_seeds if right_seeds else raw_cracks
+
+    band_x1 = max(0, min(c['bbox'][0] for c in target_seeds) - 20)
+    band_x2 = min(w, max(c['bbox'][2] for c in target_seeds) + 20)
+
+    band_mask = np.zeros_like(mask_inner)
+    band_mask[:, band_x1:band_x2] = mask_inner[:, band_x1:band_x2]
+
+    # Tracing sensitif vertikal untuk menangkap fraktur rambut halus di ujung cembung telur
+    trace_thresh = max(12, int(adaptive_thresh * 0.48))
+    _, th_trace = cv2.threshold(bh_egg, trace_thresh, 255, cv2.THRESH_BINARY)
+    th_trace = cv2.bitwise_and(th_trace, th_trace, mask=band_mask)
+    th_trace = cv2.morphologyEx(th_trace, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 35)))
+
+    cnts, _ = cv2.findContours(th_trace, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if cnts:
+        best_cnt = max(cnts, key=lambda c: cv2.boundingRect(c)[3])
+        bx_c, by_c, bw_c, bh_c = cv2.boundingRect(best_cnt)
+        traced_box = [bx_c, by_c, bx_c + bw_c, by_c + bh_c]
+    else:
+        traced_box = [
+            min(c['bbox'][0] for c in target_seeds),
+            min(c['bbox'][1] for c in target_seeds),
+            max(c['bbox'][2] for c in target_seeds),
+            max(c['bbox'][3] for c in target_seeds)
+        ]
+
+    cl_w = traced_box[2] - traced_box[0]
+    cl_h = traced_box[3] - traced_box[1]
+    cl_diag = np.sqrt(cl_w**2 + cl_h**2)
+    cl_asp = max(cl_w, cl_h) / max(1, min(cl_w, cl_h))
+
+    clusters = [{
+        'bbox': traced_box,
+        'area': cl_w * cl_h,
+        'aspect_ratio': round(float(cl_asp), 2),
+        'diagonal_length': round(float(cl_diag), 1),
+        'score': round(float(cl_asp * cl_diag), 1),
+        'cx': (traced_box[0] + traced_box[2]) / 2.0
+    }]
+    return True, clusters
+
