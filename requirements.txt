@@ -14,8 +14,8 @@ opencv-python>=4.8.0
 pillow>=10.0.0
 numpy>=1.24.0
 
-# Large Language Model (LLM) Integration - Google Gemini Only
-google-generativeai>=0.8.0
+# Large Language Model (LLM) Integration - Google Gemini (Official google-genai SDK)
+google-genai>=1.0.0
 
 # HTTP Requests & Utilities
 requests>=2.31.0

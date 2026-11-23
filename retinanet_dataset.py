@@ -149,7 +149,8 @@ class EggYoloRetinaDataset(Dataset):
         target_w = self.imgsz
         target_h = self.imgsz
         if orig_w != target_w or orig_h != target_h:
-            image = image.resize((target_w, target_h), Image.BILINEAR)
+            resample_bilinear = getattr(getattr(Image, "Resampling", Image), "BILINEAR", 2)
+            image = image.resize((target_w, target_h), resample_bilinear)
             if len(boxes) > 0:
                 scale_x = target_w / orig_w
                 scale_y = target_h / orig_h

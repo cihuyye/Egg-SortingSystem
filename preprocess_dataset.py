@@ -4,6 +4,11 @@ from typing import List, Tuple
 import cv2
 import numpy as np
 from PIL import Image
+try:
+    from PIL.Image import Resampling
+    LANCZOS_MODE = Resampling.LANCZOS
+except ImportError:
+    LANCZOS_MODE = 1
 
 def process_single_image(
     image_path: str,
@@ -20,7 +25,7 @@ def process_single_image(
     """
     # 1. Buka citra dan resize menggunakan metode Lanczos berkualitas tinggi
     pil_img = Image.open(image_path).convert("RGB")
-    pil_resized = pil_img.resize(target_size, resample=Image.LANCZOS)
+    pil_resized = pil_img.resize(target_size, resample=LANCZOS_MODE)
     arr = np.array(pil_resized)
     h, w = arr.shape[:2]
 

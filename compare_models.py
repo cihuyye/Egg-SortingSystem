@@ -7,7 +7,7 @@ Melakukan evaluasi perbandingan head-to-head pada test set independen ('Egg Data
 4. Laporan Otomatis: Markdown report & Grafik perbandingan (Bar Chart & Scatter Plot)
 
 Contoh Penggunaan:
-    python compare_models.py --yolo-weights "Egg Sorting System/models/best.pt" --retina-weights "runs/retinanet/best_retinanet.pth"
+    python compare_models.py --yolo-weights "models/best.pt" --retina-weights "runs/retinanet/best_retinanet.pth"
 """
 
 import os
@@ -16,6 +16,7 @@ import time
 import argparse
 import json
 import csv
+from typing import Any
 import cv2
 import numpy as np
 import torch
@@ -35,7 +36,7 @@ def parse_args():
     parser.add_argument(
         "--yolo-weights",
         type=str,
-        default="Egg Sorting System/models/best.pt",
+        default="models/best.pt",
         help="Path ke file bobot YOLOv8 (.pt)"
     )
     parser.add_argument(
@@ -327,6 +328,8 @@ def main():
     for idx in range(len(dataset)):
         img_path = dataset.image_paths[idx]
         orig_img_bgr = cv2.imread(img_path)
+        if orig_img_bgr is None:
+            continue
         orig_h, orig_w = orig_img_bgr.shape[:2]
 
         # Ground truth
@@ -339,14 +342,22 @@ def main():
 
         # --- A. Inferensi YOLOv8 ---
         t_y0 = time.perf_counter()
-        y_res = yolo_model.predict(source=img_path, conf=args.eval_conf, imgsz=args.imgsz, verbose=False, device=args.device)[0]
+        y_out = list(yolo_model.predict(source=img_path, conf=args.eval_conf, imgsz=args.imgsz, verbose=False, device=args.device))
+        y_res: Any = y_out[0] if y_out else None
         t_y1 = time.perf_counter()
         yolo_latencies.append((t_y1 - t_y0) * 1000.0)
 
-        y_boxes = y_res.boxes.xyxy.cpu() if len(y_res.boxes) > 0 else torch.zeros((0, 4))
-        y_scores = y_res.boxes.conf.cpu() if len(y_res.boxes) > 0 else torch.zeros((0,))
-        # Ubah class YOLO (0, 1) menjadi 1-indexed (1: cracked, 2: dirt) agar kompatibel
-        y_labels = (y_res.boxes.cls.cpu().long() + 1) if len(y_res.boxes) > 0 else torch.zeros((0,), dtype=torch.int64)
+        y_boxes = torch.zeros((0, 4))
+        y_scores = torch.zeros((0,))
+        y_labels = torch.zeros((0,), dtype=torch.int64)
+
+        if y_res is not None and getattr(y_res, "boxes", None) is not None:
+            boxes_obj = y_res.boxes
+            if len(boxes_obj) > 0:
+                y_boxes = boxes_obj.xyxy.cpu()
+                y_scores = boxes_obj.conf.cpu()
+                # Ubah class YOLO (0, 1) menjadi 1-indexed (1: cracked, 2: dirt) agar kompatibel
+                y_labels = boxes_obj.cls.cpu().long() + 1
 
         yolo_preds.append({
             "boxes": y_boxes,
@@ -356,7 +367,8 @@ def main():
 
         # --- B. Inferensi RetinaNet ---
         pil_im = Image.open(img_path).convert("RGB")
-        resized_im = pil_im.resize((args.imgsz, args.imgsz), Image.BILINEAR)
+        resample_bilinear = getattr(getattr(Image, "Resampling", Image), "BILINEAR", 2)
+        resized_im = pil_im.resize((args.imgsz, args.imgsz), resample_bilinear)
         img_tensor = TF.to_tensor(resized_im).unsqueeze(0).to(device)
 
         if device.type == "cuda":

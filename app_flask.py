@@ -13,7 +13,7 @@ import os
 import time
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, request, jsonify, send_from_directory, send_file
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 from PIL import Image
 import numpy as np
@@ -28,7 +28,6 @@ except ImportError:
     YOLO_AVAILABLE = False
 
 from modules.shape_size_detector import measure_egg_shape_and_size, get_clean_egg_canvas, detect_physical_cracks, preprocess_egg_image
-from modules.candling_detector import analyze_candling_quality
 from modules.grading_logic import evaluate_final_grade
 from modules.llm_interpreter import (
     get_llm_interpretation,
@@ -48,7 +47,9 @@ CORS(app)  # Izinkan cross-origin requests dari web browser
 # ==============================================================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "models", "best.pt")
-DASHBOARD_DIR = os.path.join(BASE_DIR, "dashboard")
+# Dashboard tidak lagi di-bundle — frontend terpisah di repo eggsort-dashboard
+# Server ini beroperasi sebagai API-only backend
+DASHBOARD_DIR = None
 
 # Model YOLOv8-seg hanya punya 2 kelas: cracked (0), dirt (1)
 # 'good' BUKAN kelas model — itu label default ketika tidak ada defect terdeteksi
@@ -103,44 +104,17 @@ except Exception as e:
 
 
 # ==============================================================================
-# ROUTES WEB DASHBOARD
+# ROUTES WEB — API-only mode (frontend served by eggsort-dashboard)
 # ==============================================================================
 @app.route("/")
 def index():
-    dashboard_file = os.path.join(DASHBOARD_DIR, "index.html")
-    if os.path.exists(dashboard_file):
-        return send_file(dashboard_file)
     return jsonify({
         "status": "online",
-        "service": "Egg Quality Sorting System (Flask)",
+        "service": "Egg Quality Sorting System (Flask API)",
         "docs": "/api",
-        "health": "/api/v1/status"
+        "health": "/api/v1/status",
+        "note": "Frontend served separately via eggsort-dashboard"
     })
-
-
-@app.route("/style.css")
-def get_style():
-    return send_from_directory(DASHBOARD_DIR, "style.css", mimetype="text/css")
-
-
-@app.route("/app.js")
-def get_script():
-    return send_from_directory(DASHBOARD_DIR, "app.js", mimetype="application/javascript")
-
-
-@app.route("/assets/<path:filename>")
-def serve_assets(filename):
-    return send_from_directory(os.path.join(DASHBOARD_DIR, "assets"), filename)
-
-
-@app.route("/favicon.svg")
-def serve_favicon():
-    return send_from_directory(DASHBOARD_DIR, "favicon.svg", mimetype="image/svg+xml")
-
-
-@app.route("/icons.svg")
-def serve_icons():
-    return send_from_directory(DASHBOARD_DIR, "icons.svg", mimetype="image/svg+xml")
 
 
 # ==============================================================================
@@ -206,7 +180,7 @@ def model_info():
         },
         "opencv_modules": [
             "Contour Ellipse Fitting (Geometry & Size)",
-            "Luminance & Dark Spot Ratio (Candling)"
+            "Fracture Morphological Analysis (Hairline Crack)"
         ]
     })
 
@@ -566,21 +540,10 @@ def predict():
                 "size_category": "Sedang (50g - 60g)"
             }
 
-        dummy_candling = {
-            "mean_brightness": 180.0,
-            "dark_spot_ratio": 0.0,
-            "air_cell_depth_cm": 0.3,
-            "air_cell_depth_mm": 3.0,
-            "candling_status": "Mutu I",
-            "reason": "Parameter visual cangkang & geometri",
-            "orientation_detected": "Normal"
-        }
-
         grading_result = evaluate_final_grade(
             yolo_defect_class=dominant_defect_360,
             yolo_confidence=final_conf_360,
-            shape_dict=best_shape_result,
-            candling_dict=dummy_candling
+            shape_dict=best_shape_result
         )
 
         # 6. Bangun respons terstruktur
@@ -701,10 +664,11 @@ def chat():
 if __name__ == "__main__":
     provider, _ = detect_active_provider()
     print("\n" + "=" * 65)
-    print(" 🚀 EGG QUALITY SORTING & DASHBOARD SERVER AKTIF (FLASK)")
+    print(" 🚀 EGG QUALITY SORTING API SERVER AKTIF (FLASK)")
     print(" 🥚 Standar Regulasi : SNI 3926:2023 (Telur Ayam Konsumsi)")
     print(f" 🤖 LLM Model        : Google Gemini ({DEFAULT_GEMINI_MODEL})")
     print(f" 🔑 Status API Key   : {'AKTIF' if provider == 'gemini' else 'BELUM DISETEL (Setel GEMINI_API_KEY)'}")
-    print(" 👉 Dashboard URL    : http://127.0.0.1:8000")
+    print(" 👉 API URL          : http://127.0.0.1:8000")
+    print(" 📝 Frontend         : eggsort-dashboard (terpisah)")
     print("=" * 65 + "\n")
     app.run(host="127.0.0.1", port=8000, debug=False)

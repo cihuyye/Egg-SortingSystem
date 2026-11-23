@@ -81,7 +81,8 @@ class RetinaNetDetector:
         orig_w, orig_h = pil_img.size
 
         # Resize untuk input model
-        resized = pil_img.resize((self.imgsz, self.imgsz), Image.BILINEAR)
+        resample_bilinear = getattr(getattr(Image, "Resampling", Image), "BILINEAR", 2)
+        resized = pil_img.resize((self.imgsz, self.imgsz), resample_bilinear)
         img_tensor = TF.to_tensor(resized).unsqueeze(0).to(self.device)
 
         scale_x = orig_w / float(self.imgsz)
