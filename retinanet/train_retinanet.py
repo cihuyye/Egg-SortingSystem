@@ -8,6 +8,19 @@ Contoh Penggunaan:
 
 import os
 import sys
+from pathlib import Path
+
+# Memastikan direktori script & direktori root induk terdaftar pada sys.path
+_CURR_DIR = str(Path(__file__).resolve().parent)
+_PARENT_DIR = str(Path(__file__).resolve().parent.parent)
+if _CURR_DIR not in sys.path:
+    sys.path.insert(0, _CURR_DIR)
+if _PARENT_DIR not in sys.path:
+    sys.path.append(_PARENT_DIR)
+
+
+import os
+import sys
 import time
 import argparse
 import csv
@@ -21,6 +34,15 @@ from retinanet_dataset import EggYoloRetinaDataset, collate_fn, NUM_CLASSES
 from retinanet_model import create_retinanet_model, save_checkpoint
 from retinanet_metrics import evaluate_detections
 
+
+
+def _resolve_dataset_dir(ds_path):
+    if os.path.exists(ds_path):
+        return ds_path
+    alt = os.path.join(_PARENT_DIR, ds_path)
+    if os.path.exists(alt):
+        return alt
+    return ds_path
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Pelatihan Model RetinaNet ResNet-50 FPN")
@@ -150,13 +172,13 @@ def train():
 
     # 1. Inisialisasi Dataset & DataLoader
     train_dataset = EggYoloRetinaDataset(
-        root_dir=args.dataset_dir,
+        root_dir=_resolve_dataset_dir(_resolve_dataset_dir(args.dataset_dir)),
         split="train",
         imgsz=args.imgsz,
         augment=True
     )
     val_dataset = EggYoloRetinaDataset(
-        root_dir=args.dataset_dir,
+        root_dir=_resolve_dataset_dir(_resolve_dataset_dir(args.dataset_dir)),
         split="valid",
         imgsz=args.imgsz,
         augment=False

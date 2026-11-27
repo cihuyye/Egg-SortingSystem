@@ -1,4 +1,4 @@
-path: D:/github_rama/Egg-SortingSystem/Egg Dataset Clean
+path: .
 train: train/images
 val: valid/images
 test: test/images

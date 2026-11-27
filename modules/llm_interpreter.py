@@ -2,7 +2,7 @@
 ================================================================================
 MODUL INTEGRASI LLM (LARGE LANGUAGE MODEL) - GOOGLE GEMINI ONLY
 Sistem Klasifikasi & Sortir Mutu Telur Otomatis (SNI 3926:2023)
-Model: Google Gemini (gemini-3.8-flash)
+Model: Google Gemini (gemini-3.5-flash)
 SDK: google-genai (resmi, menggantikan google-generativeai yang deprecated)
 ================================================================================
 
@@ -10,7 +10,7 @@ Modul ini menghubungkan hasil inspeksi fisik cangkang (YOLOv8 360°) dan penguku
 geometri/bobot (OpenCV) ke Google Gemini API.
 
 Fitur Unggulan:
-1. Google Gemini API Only: Menggunakan model default 'gemini-3.8-flash' (dengan auto-fallback jika dibutuhkan).
+1. Google Gemini API Only: Menggunakan model default 'gemini-3.5-flash' (dengan auto-fallback jika dibutuhkan).
 2. SDK Resmi Terbaru: Menggunakan `google.genai` (bukan `google.generativeai` yang deprecated).
 3. Auto-load .env & Direct Key: Otomatis membaca GEMINI_API_KEY dari environment, file .env, atau custom API key dari client.
 4. Strict Context Locking & Boundary Warning: Mengunci role LLM 100% sebagai Auditor Mutu SNI 3926:2023.

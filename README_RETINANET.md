@@ -1,15 +1,15 @@
 # 🥚 Panduan Pelatihan & Komparasi Model RetinaNet vs YOLOv8 Nano
 **Proyek:** Sistem Sortir Mutu Telur Otomatis Berdasarkan SNI 3926:2023  
-**Semester 5 Project**
+**Modul Workshop Sistem Cerdas (Artificial Intelligence & Deep Learning)**
 
-Repository ini telah dilengkapi dengan pipeline lengkap untuk melatih, mengevaluasi, dan membandingkan model **RetinaNet (ResNet-50 FPN)** secara *head-to-head* dengan model **YOLOv8 Nano** yang sudah Anda latih sebelumnya.
+Repositori ini telah dilengkapi dengan *pipeline* mandiri untuk melatih, mengevaluasi, dan membandingkan model **RetinaNet (ResNet-50 FPN)** secara *head-to-head* dengan model utama **YOLOv8 Nano** pada dataset inspeksi telur independen (`Egg Dataset Clean`).
 
 ---
 
 ## 📁 Struktur Berkas Terkait RetinaNet & Komparasi
 
 ```text
-Egg Sorting System/
+Egg-SortingSystem/
 ├── Egg Dataset Clean/                    # Dataset bersih (717 train, 87 valid, 88 test)
 │   ├── train/ (images & labels)
 │   ├── valid/ (images & labels)
@@ -18,84 +18,69 @@ Egg Sorting System/
 │       ├── instances_train.json
 │       ├── instances_valid.json
 │       └── instances_test.json
-├── retinanet_dataset.py                 # PyTorch Dataset loader (baca poligon YOLO & neg sample)
-├── retinanet_model.py                   # Arsitektur RetinaNet ResNet-50 FPN Torchvision
-├── retinanet_metrics.py                 # Evaluator metrik mAP50, mAP50-95, Precision, Recall
-├── train_retinanet.py                   # Script pelatihan lokal model RetinaNet
+├── models/
+│   ├── best.pt                          # Bobot model YOLOv8 Nano utama (~6.5 MB)
+│   └── best_retinanet.pth               # Bobot checkpoint RetinaNet ResNet-50 FPN (~135 MB)
+├── retinanet_dataset.py                 # PyTorch Dataset loader (baca poligon YOLO & negative samples)
+├── retinanet_model.py                   # Arsitektur RetinaNet ResNet-50 FPN (Torchvision Detection)
+├── retinanet_metrics.py                 # Evaluator metrik mAP50, mAP50-95, Precision, Recall, F1
+├── train_retinanet.py                   # Script pelatihan lokal model RetinaNet (GPU CUDA)
+├── train_retinanet_cpu.py               # Script pelatihan fallback CPU (jika tidak ada GPU)
 ├── eval_retinanet.py                    # Script evaluasi independen pada test set
-├── predict_retinanet.py                 # Script inferensi visual & class detector
-├── compare_models.py                    # Script komparasi head-to-head YOLOv8 vs RetinaNet
-├── yolo_to_coco.py                      # Konverter dataset YOLOv8 ke COCO JSON
-├── Train_Egg_Defect_RetinaNet_Colab.ipynb # Notebook Google Colab (Train + Visual Compare)
-└── Egg Sorting System/
-    ├── models/
-    │   ├── best.pt                      # Bobot model YOLOv8 Anda (6.5 MB)
-    │   └── best_retinanet.pth           # Bobot model RetinaNet Anda
-    └── modules/
-        └── retinanet_detector.py        # Adapter RetinaNet untuk sistem sortir Flask/OpenCV
+├── predict_retinanet.py                 # Script inferensi visual & deteksi cacat RetinaNet
+├── compare_models.py                    # Script komparasi Head-to-Head YOLOv8 vs RetinaNet
+├── yolo_to_coco.py                      # Konverter dataset YOLOv8 ke standar COCO JSON
+└── README_RETINANET.md                  # Dokumentasi panduan komparasi
 ```
 
 ---
 
 ## 🔄 Bagaimana Dataset YOLOv8 Diadaptasi untuk RetinaNet
 
-Dataset `Egg Dataset Clean` awalnya dibuat untuk YOLOv8 dengan karakteristik:
-1. **Format Poligon Segmen**: Berisi deretan titik `class_id x1 y1 x2 y2 ...` hasil ekspor LabelMe (`json_to_yolo.py`).
-2. **Negative Samples**: Folder `good` berisi file `.txt` kosong berukuran 0-byte (telur mulus tanpa bounding box).
+Dataset `Egg Dataset Clean` awalnya dibuat dalam format YOLO:
+1. **Format Poligon Segmen**: Berisi baris `class_id x1 y1 x2 y2 ...` hasil ekspor LabelMe (`json_to_yolo.py`).
+2. **Negative Samples**: Folder `good` berisi file `.txt` kosong berukuran 0-byte (telur utuh normal tanpa cacat).
 
-File [`retinanet_dataset.py`](file:///e:/Semester%205/Project/Egg%20Sorting%20System/retinanet_dataset.py) secara otomatis:
+File [`retinanet_dataset.py`](file:///d:/github_rama/Egg-SortingSystem/retinanet_dataset.py) secara otomatis:
 - Menghitung bounding box pembungkus minimal `[xmin, ymin, xmax, ymax]` dari poligon:
   $$\text{xmin} = \min(x) \times W, \quad \text{xmax} = \max(x) \times W$$
   $$\text{ymin} = \min(y) \times H, \quad \text{ymax} = \max(y) \times H$$
 - Memetakan ID kelas sesuai standar Torchvision Detection:
-  - `0`: Background (negative sample telur normal)
-  - `1`: `cracked` (retak)
-  - `2`: `dirt` (kotoran)
-- Menangani gambar tanpa cacat (`good`) secara aman (target berupa tensor kosong `[0, 4]`).
-- Melakukan resize ke 640×640 piksel dan augmentasi data (horizontal flip, brightness/contrast jitter) secara sinkron antara citra dan bounding box.
+  - `0`: Background (negative sample telur normal / cangkang utuh)
+  - `1`: `cracked` (cacat retak)
+  - `2`: `dirt` (cacat noda kotoran)
+- Menangani gambar tanpa cacat (`good`) secara aman (target berupa tensor koordinat kosong `[0, 4]`).
+- Melakukan penskalaan ke $640\times 640$ piksel dan augmentasi data (*horizontal flip, brightness/contrast jitter*) secara sinkron antara citra dan bounding box (kompatibel penuh dengan Pillow 12+).
 
 ---
 
 ## 🚀 Cara Menjalankan Pelatihan RetinaNet
 
-### Opsi 1: Latih di Google Colab (Sangat Direkomendasikan jika Menggunakan GPU T4)
-1. Buka [Google Colab](https://colab.research.google.com/).
-2. Unggah file notebook [`Train_Egg_Defect_RetinaNet_Colab.ipynb`](file:///e:/Semester%205/Project/Egg%20Sorting%20System/Train_Egg_Defect_RetinaNet_Colab.ipynb).
-3. Unggah file zip dataset `Egg_Dataset_Clean.zip` ke panel Files Colab.
-4. Jalankan seluruh cell (*Runtime > Run all*):
-   - Cell 1-2: Cek GPU & ekstrak dataset.
-   - Cell 3-5: Training 50 epoch dengan AdamW & Cosine Annealing LR.
-   - Cell 6-7: Visualisasi kurva loss dan deteksi pada test set.
-   - Cell 8: Unduh otomatis `best_retinanet.pth`.
-   - Cell 9: Komparasi langsung dengan mengunggah `best.pt` YOLOv8 Anda.
-
-### Opsi 2: Latih di Komputer Lokal (CLI)
-Jika komputer Anda memiliki GPU NVIDIA (CUDA):
-
+### Opsi 1: Latih di Komputer Lokal (Dengan GPU NVIDIA CUDA)
 ```bash
-cd "e:\Semester 5\Project\Egg Sorting System"
-
-# Pelatihan standar (50 epoch, batch size 8, resolusi 640)
 python train_retinanet.py --epochs 50 --batch-size 8 --lr 0.0001 --optimizer adamw
 ```
 
+### Opsi 2: Latih Menggunakan CPU (Fallback jika Tidak Ada GPU CUDA)
+```bash
+python train_retinanet_cpu.py --epochs 10 --batch-size 4
+```
+
 Hasil pelatihan akan tersimpan di folder `runs/retinanet/`:
-- `best_retinanet.pth`: Bobot model dengan mAP50 tertinggi.
-- `last_retinanet.pth`: Bobot checkpoint epoch terakhir.
-- `training_history.csv`: Log metrik per epoch.
-- `loss_curves.png`: Grafik kurva loss pelatihan & mAP.
+* `best_retinanet.pth`: Bobot model dengan mAP50 tertinggi.
+* `last_retinanet.pth`: Bobot checkpoint epoch terakhir.
+* `training_history.csv`: Log riwayat metrik per epoch.
+* `loss_curves.png`: Grafik kurva loss pelatihan & mAP.
 
 ---
 
 ## ⚖️ Cara Menjalankan Komparasi Head-to-Head
 
-Setelah memiliki bobot `best_retinanet.pth` dan `best.pt` (YOLOv8):
+Untuk mengevaluasi performa kedua model pada data uji independen (*test split*):
 
 ```bash
-cd "e:\Semester 5\Project\Egg Sorting System"
-
 python compare_models.py \
-    --yolo-weights "Egg Sorting System/models/best.pt" \
+    --yolo-weights "models/best.pt" \
     --retina-weights "runs/retinanet/best_retinanet.pth" \
     --dataset-dir "Egg Dataset Clean" \
     --split test \
@@ -103,45 +88,30 @@ python compare_models.py \
 ```
 
 ### Output yang Dihasilkan Otomatis di `runs/comparison/`:
-1. **`model_comparison_report.md`**: Laporan komparasi lengkap dengan analisis teoritis (bisa langsung disalin ke Bab 4/5 Laporan Proyek).
+1. **`model_comparison_report.md`**: Laporan komparasi kuantitatif lengkap dengan analisis teoretis (dapat langsung disalin ke bab hasil dan pembahasan laporan tugas akhir).
 2. **`comparison_metrics_bar.png`**: Grafik bar perbandingan mAP50, mAP50-95, Precision, Recall, dan F1-Score.
 3. **`speed_vs_accuracy.png`**: Grafik scatter plot perbandingan kecepatan (*latency*) vs akurasi (*mAP50*).
-4. **`side_by_side/`**: Kumpulan citra perbandingan visual berdampingan:
+4. **`side_by_side/`**: Kumpulan citra visualisasi perbandingan berdampingan:
    `[ Panel 1: Ground Truth ] | [ Panel 2: YOLOv8 Nano ] | [ Panel 3: RetinaNet ResNet-50 ]`
 
 ---
 
-## 📊 Ringkasan Teoretis Komparasi untuk Laporan Semester 5
+## 📊 Ringkasan Teoretis Komparasi untuk Laporan Sistem Cerdas
 
-| Parameter Evaluasi | YOLOv8 Nano (`yolov8n.pt`) | RetinaNet (`ResNet-50 FPN`) |
+| Parameter Evaluasi | YOLOv8 Nano (`best.pt`) | RetinaNet (`best_retinanet.pth`) |
 | :--- | :---: | :---: |
 | **Arsitektur Backbone** | Modified CSPDarknet53 (Ringan & Cepat) | Deep ResNet-50 + FPN (Fitur Kaya) |
 | **Paradigma Deteksi** | Anchor-Free Decoupled Head | Anchor-Based Multi-scale Head |
 | **Fungsi Loss** | Task-Aligned Loss (CIoU + DFL + BCE) | Focal Loss ($\alpha=0.25, \gamma=2.0$) + Smooth L1 |
-| **Ukuran Bobot Model** | **~6.5 MB** | **~135 MB** (20x lipat) |
-| **Total Parameter** | **~3.2 Juta Parameter** | **~34 Juta Parameter** (10x lipat) |
+| **Ukuran Bobot Model** | **~6.5 MB** | **~135 MB** (~20x lebih besar) |
+| **Total Parameter** | **~3.2 Juta Parameter** | **~34 Juta Parameter** (~10x lebih banyak) |
 | **Latensi Inferensi (GPU)** | **~5 - 6 ms** per citra | **~25 - 35 ms** per citra |
 | **Throughput (FPS)** | **~160 - 180 FPS** | **~30 - 40 FPS** |
-| **Kelebihan Utama** | Ekstrem cepat, ringan untuk edge device (Raspberry Pi/Jetson) | Robust terhadap class imbalance ekstrem dan cacat mikro |
-
-### Rekomendasi untuk Sistem Sortir Telur:
-1. **Untuk Konveyor Real-Time (Hardware):** Gunakan **YOLOv8 Nano** sebagai model utama pada Raspberry Pi/PC konveyor karena waktu proses ~5.6 ms menjamin aktuator servo penyeleksi tidak mengalami *delay* saat telur lewat.
-2. **Untuk Audit Mutu & Laboratorium:** Gunakan **RetinaNet** sebagai sistem validasi sekunder di server audit untuk memeriksa ulang telur grade tinggi atau menganalisis retakan mikro halus.
+| **Karakteristik Utama** | Inferensi super cepat, sangat efisien untuk edge device konveyor | Robust terhadap ketidakseimbangan kelas ekstrem dan cacat mikro |
 
 ---
 
-## 🛠️ Menggunakan RetinaNet di Aplikasi Sortir Telur
+## 🎯 Rekomendasi Pemilihan Model untuk Sistem Industri
 
-Modul adapter [`Egg Sorting System/modules/retinanet_detector.py`](file:///e:/Semester%205/Project/Egg%20Sorting%20System/Egg%20Sorting%20System/modules/retinanet_detector.py) siap diimpor ke script inspeksi Anda:
-
-```python
-from modules.retinanet_detector import RetinaNetEggDetector
-
-# Inisialisasi detector
-detector = RetinaNetEggDetector(weights_path="models/best_retinanet.pth", conf_thresh=0.40)
-
-# Prediksi dari file gambar atau frame webcam
-defect_class, confidence, detections = detector.predict("test_egg.jpg")
-print(f"Hasil Deteksi: {defect_class.upper()} (Keyakinan: {confidence:.2%})")
-```
-
+1. **Untuk Konveyor Real-Time (Hardware):** Gunakan **YOLOv8 Nano** sebagai model utama pada konveyor karena waktu proses $\sim 5\text{ ms}$ menjamin aktuator servo/pneumatik penyeleksi tidak mengalami keterlambatan (*zero-delay actuation*) saat telur melintas.
+2. **Untuk Audit Mutu Laboratorium:** Gunakan **RetinaNet** sebagai sistem verifikasi kedua di server audit untuk menginspeksi ulang sampel telur bernilai tinggi atau menganalisis retakan mikro rambut yang sangat halus.

@@ -42,8 +42,11 @@ def compute_ap(recalls, precisions):
 
     # 101-point interpolation sesuai COCO
     x = np.linspace(0, 1, 101)
-    ap = np.trapz(np.interp(x, mrec, mpre), x)
-    return float(ap)
+    y = np.interp(x, mrec, mpre)
+    trapz_fn = getattr(np, 'trapezoid', getattr(np, 'trapz', None))
+    if callable(trapz_fn):
+        return float(trapz_fn(y, x))
+    return float(np.sum((x[1:] - x[:-1]) * (y[1:] + y[:-1]) / 2.0))
 
 
 def evaluate_detections(all_predictions, all_targets, iou_thresholds=None, class_ids=(1, 2)):

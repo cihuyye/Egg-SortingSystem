@@ -11,6 +11,19 @@ Jalankan:
 
 import os
 import sys
+from pathlib import Path
+
+# Memastikan direktori script & direktori root induk terdaftar pada sys.path
+_CURR_DIR = str(Path(__file__).resolve().parent)
+_PARENT_DIR = str(Path(__file__).resolve().parent.parent)
+if _CURR_DIR not in sys.path:
+    sys.path.insert(0, _CURR_DIR)
+if _PARENT_DIR not in sys.path:
+    sys.path.append(_PARENT_DIR)
+
+
+import os
+import sys
 import time
 import argparse
 import csv
@@ -33,6 +46,15 @@ import seaborn as sns
 
 from retinanet_dataset import EggYoloRetinaDataset, collate_fn, NUM_CLASSES, CLASS_MAPPING_YOLO
 
+
+
+def _resolve_dataset_dir(ds_path):
+    if os.path.exists(ds_path):
+        return ds_path
+    alt = os.path.join(_PARENT_DIR, ds_path)
+    if os.path.exists(alt):
+        return alt
+    return ds_path
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Training RetinaNet Hemat Sumber Daya di CPU")
@@ -63,7 +85,11 @@ def compute_ap(rec, prec):
     for i in range(len(mpre) - 2, -1, -1):
         mpre[i] = max(mpre[i], mpre[i + 1])
     x = np.linspace(0, 1, 101)
-    return float(np.trapz(np.interp(x, mrec, mpre), x))
+    y = np.interp(x, mrec, mpre)
+    trapz_fn = getattr(np, 'trapezoid', getattr(np, 'trapz', None))
+    if callable(trapz_fn):
+        return float(trapz_fn(y, x))
+    return float(np.sum((x[1:] - x[:-1]) * (y[1:] + y[:-1]) / 2.0))
 
 
 def main():
@@ -82,9 +108,9 @@ def main():
     print("=" * 75)
 
     # 1. Dataset & DataLoader
-    train_ds = EggYoloRetinaDataset(args.dataset_dir, split="train", imgsz=args.imgsz, augment=True)
-    valid_ds = EggYoloRetinaDataset(args.dataset_dir, split="valid", imgsz=args.imgsz, augment=False)
-    test_ds = EggYoloRetinaDataset(args.dataset_dir, split="test", imgsz=args.imgsz, augment=False)
+    train_ds = EggYoloRetinaDataset(_resolve_dataset_dir(_resolve_dataset_dir(args.dataset_dir)), split="train", imgsz=args.imgsz, augment=True)
+    valid_ds = EggYoloRetinaDataset(_resolve_dataset_dir(_resolve_dataset_dir(args.dataset_dir)), split="valid", imgsz=args.imgsz, augment=False)
+    test_ds = EggYoloRetinaDataset(_resolve_dataset_dir(_resolve_dataset_dir(args.dataset_dir)), split="test", imgsz=args.imgsz, augment=False)
 
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
     valid_loader = DataLoader(valid_ds, batch_size=args.batch_size, shuffle=False, collate_fn=collate_fn)

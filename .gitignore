@@ -1,6 +1,9 @@
 # Model Weights yang melebihi batas 100 MB GitHub
 best_resnet.pt
 *.pth
+retinanet/best.pt
+retinanet/weights/
+retinanet/*.pt
 runs/retinanet*/weights/
 
 # Python Cache

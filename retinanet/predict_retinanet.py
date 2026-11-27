@@ -8,6 +8,19 @@ Contoh Penggunaan:
 """
 
 import os
+import sys
+from pathlib import Path
+
+# Memastikan direktori script & direktori root induk terdaftar pada sys.path
+_CURR_DIR = str(Path(__file__).resolve().parent)
+_PARENT_DIR = str(Path(__file__).resolve().parent.parent)
+if _CURR_DIR not in sys.path:
+    sys.path.insert(0, _CURR_DIR)
+if _PARENT_DIR not in sys.path:
+    sys.path.append(_PARENT_DIR)
+
+
+import os
 import glob
 import argparse
 import cv2

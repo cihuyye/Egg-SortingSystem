@@ -3,7 +3,7 @@
 SERVER REST API SISTEM GRADING & KLASIFIKASI TELUR OTOMATIS
 Framework: Flask (Python Web Microframework)
 Integrasi: YOLOv8-seg (Instance Segmentation 360°) + OpenCV (Geometri) + LLM (Google Gemini)
-Model LLM: Google Gemini (gemini-3.8-flash)
+Model LLM: Google Gemini (gemini-3.5-flash)
 Standar Acuan: SNI 3926:2023 (Telur Ayam Konsumsi)
 ================================================================================
 """
@@ -571,7 +571,7 @@ def predict():
             }
         }
 
-        # 7. Integrasi LLM: Minta interpretasi naratif dari Google Gemini (gemini-3.8-flash)
+        # 7. Integrasi LLM: Minta interpretasi naratif dari Google Gemini (gemini-3.5-flash)
         custom_key = request.form.get("api_key") or request.headers.get("X-Gemini-Key")
         llm_meta = get_llm_interpretation(response_data, custom_api_key=custom_key)
         response_data["llm_interpretation"] = llm_meta.get("text", "")
@@ -618,7 +618,7 @@ def predict():
 @app.route("/api/v1/chat", methods=["POST"])
 def chat():
     """
-    Endpoint Chatbot Interaktif dengan Google Gemini (gemini-3.8-flash)
+    Endpoint Chatbot Interaktif dengan Google Gemini (gemini-3.5-flash)
     Terkunci ketat pada peran Auditor Mutu SNI 3926:2023.
 
     Payload JSON:

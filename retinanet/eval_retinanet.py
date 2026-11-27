@@ -7,6 +7,19 @@ Contoh Penggunaan:
 """
 
 import os
+import sys
+from pathlib import Path
+
+# Memastikan direktori script & direktori root induk terdaftar pada sys.path
+_CURR_DIR = str(Path(__file__).resolve().parent)
+_PARENT_DIR = str(Path(__file__).resolve().parent.parent)
+if _CURR_DIR not in sys.path:
+    sys.path.insert(0, _CURR_DIR)
+if _PARENT_DIR not in sys.path:
+    sys.path.append(_PARENT_DIR)
+
+
+import os
 import time
 import json
 import argparse
@@ -17,6 +30,15 @@ from retinanet_dataset import EggYoloRetinaDataset, collate_fn
 from retinanet_model import load_checkpoint
 from retinanet_metrics import evaluate_detections
 
+
+
+def _resolve_dataset_dir(ds_path):
+    if os.path.exists(ds_path):
+        return ds_path
+    alt = os.path.join(_PARENT_DIR, ds_path)
+    if os.path.exists(alt):
+        return alt
+    return ds_path
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Evaluasi Independen Model RetinaNet")
@@ -80,7 +102,7 @@ def evaluate():
 
     # 1. Load Dataset
     test_dataset = EggYoloRetinaDataset(
-        root_dir=args.dataset_dir,
+        root_dir=_resolve_dataset_dir(_resolve_dataset_dir(args.dataset_dir)),
         split=args.split,
         imgsz=args.imgsz,
         augment=False
