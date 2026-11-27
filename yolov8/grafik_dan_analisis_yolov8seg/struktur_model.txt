@@ -1,0 +1,345 @@
+----------------------------------------------------------------------
+BLOCK 0: Conv
+----------------------------------------------------------------------
+Layer 0 [Conv] Parameters: 0
+    conv [Conv2d] Parameters: 432
+    bn [BatchNorm2d] Parameters: 32
+    act [SiLU] Parameters: 0
+----------------------------------------------------------------------
+BLOCK 1: Conv
+----------------------------------------------------------------------
+Layer 1 [Conv] Parameters: 0
+    conv [Conv2d] Parameters: 4,608
+    bn [BatchNorm2d] Parameters: 64
+    act [SiLU] Parameters: 0
+----------------------------------------------------------------------
+BLOCK 2: C2f
+----------------------------------------------------------------------
+Layer 2 [C2f] Parameters: 0
+    cv1 [Conv] Parameters: 0
+        conv [Conv2d] Parameters: 1,024
+        bn [BatchNorm2d] Parameters: 64
+        act [SiLU] Parameters: 0
+    cv2 [Conv] Parameters: 0
+        conv [Conv2d] Parameters: 1,536
+        bn [BatchNorm2d] Parameters: 64
+    m [ModuleList] Parameters: 0
+        0 [Bottleneck] Parameters: 0
+            cv1 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 2,304
+                bn [BatchNorm2d] Parameters: 32
+            cv2 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 2,304
+                bn [BatchNorm2d] Parameters: 32
+----------------------------------------------------------------------
+BLOCK 3: Conv
+----------------------------------------------------------------------
+Layer 3 [Conv] Parameters: 0
+    conv [Conv2d] Parameters: 18,432
+    bn [BatchNorm2d] Parameters: 128
+    act [SiLU] Parameters: 0
+----------------------------------------------------------------------
+BLOCK 4: C2f
+----------------------------------------------------------------------
+Layer 4 [C2f] Parameters: 0
+    cv1 [Conv] Parameters: 0
+        conv [Conv2d] Parameters: 4,096
+        bn [BatchNorm2d] Parameters: 128
+        act [SiLU] Parameters: 0
+    cv2 [Conv] Parameters: 0
+        conv [Conv2d] Parameters: 8,192
+        bn [BatchNorm2d] Parameters: 128
+    m [ModuleList] Parameters: 0
+        0 [Bottleneck] Parameters: 0
+            cv1 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 9,216
+                bn [BatchNorm2d] Parameters: 64
+            cv2 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 9,216
+                bn [BatchNorm2d] Parameters: 64
+        1 [Bottleneck] Parameters: 0
+            cv1 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 9,216
+                bn [BatchNorm2d] Parameters: 64
+            cv2 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 9,216
+                bn [BatchNorm2d] Parameters: 64
+----------------------------------------------------------------------
+BLOCK 5: Conv
+----------------------------------------------------------------------
+Layer 5 [Conv] Parameters: 0
+    conv [Conv2d] Parameters: 73,728
+    bn [BatchNorm2d] Parameters: 256
+    act [SiLU] Parameters: 0
+----------------------------------------------------------------------
+BLOCK 6: C2f
+----------------------------------------------------------------------
+Layer 6 [C2f] Parameters: 0
+    cv1 [Conv] Parameters: 0
+        conv [Conv2d] Parameters: 16,384
+        bn [BatchNorm2d] Parameters: 256
+        act [SiLU] Parameters: 0
+    cv2 [Conv] Parameters: 0
+        conv [Conv2d] Parameters: 32,768
+        bn [BatchNorm2d] Parameters: 256
+    m [ModuleList] Parameters: 0
+        0 [Bottleneck] Parameters: 0
+            cv1 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 36,864
+                bn [BatchNorm2d] Parameters: 128
+            cv2 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 36,864
+                bn [BatchNorm2d] Parameters: 128
+        1 [Bottleneck] Parameters: 0
+            cv1 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 36,864
+                bn [BatchNorm2d] Parameters: 128
+            cv2 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 36,864
+                bn [BatchNorm2d] Parameters: 128
+----------------------------------------------------------------------
+BLOCK 7: Conv
+----------------------------------------------------------------------
+Layer 7 [Conv] Parameters: 0
+    conv [Conv2d] Parameters: 294,912
+    bn [BatchNorm2d] Parameters: 512
+    act [SiLU] Parameters: 0
+----------------------------------------------------------------------
+BLOCK 8: C2f
+----------------------------------------------------------------------
+Layer 8 [C2f] Parameters: 0
+    cv1 [Conv] Parameters: 0
+        conv [Conv2d] Parameters: 65,536
+        bn [BatchNorm2d] Parameters: 512
+        act [SiLU] Parameters: 0
+    cv2 [Conv] Parameters: 0
+        conv [Conv2d] Parameters: 98,304
+        bn [BatchNorm2d] Parameters: 512
+    m [ModuleList] Parameters: 0
+        0 [Bottleneck] Parameters: 0
+            cv1 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 147,456
+                bn [BatchNorm2d] Parameters: 256
+            cv2 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 147,456
+                bn [BatchNorm2d] Parameters: 256
+----------------------------------------------------------------------
+BLOCK 9: SPPF
+----------------------------------------------------------------------
+Layer 9 [SPPF] Parameters: 0
+    cv1 [Conv] Parameters: 0
+        conv [Conv2d] Parameters: 32,768
+        bn [BatchNorm2d] Parameters: 256
+        act [SiLU] Parameters: 0
+    cv2 [Conv] Parameters: 0
+        conv [Conv2d] Parameters: 131,072
+        bn [BatchNorm2d] Parameters: 512
+    m [MaxPool2d] Parameters: 0
+----------------------------------------------------------------------
+BLOCK 10: Upsample
+----------------------------------------------------------------------
+Layer 10 [Upsample] Parameters: 0
+----------------------------------------------------------------------
+BLOCK 11: Concat
+----------------------------------------------------------------------
+Layer 11 [Concat] Parameters: 0
+----------------------------------------------------------------------
+BLOCK 12: C2f
+----------------------------------------------------------------------
+Layer 12 [C2f] Parameters: 0
+    cv1 [Conv] Parameters: 0
+        conv [Conv2d] Parameters: 49,152
+        bn [BatchNorm2d] Parameters: 256
+        act [SiLU] Parameters: 0
+    cv2 [Conv] Parameters: 0
+        conv [Conv2d] Parameters: 24,576
+        bn [BatchNorm2d] Parameters: 256
+    m [ModuleList] Parameters: 0
+        0 [Bottleneck] Parameters: 0
+            cv1 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 36,864
+                bn [BatchNorm2d] Parameters: 128
+            cv2 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 36,864
+                bn [BatchNorm2d] Parameters: 128
+----------------------------------------------------------------------
+BLOCK 13: Upsample
+----------------------------------------------------------------------
+Layer 13 [Upsample] Parameters: 0
+----------------------------------------------------------------------
+BLOCK 14: Concat
+----------------------------------------------------------------------
+Layer 14 [Concat] Parameters: 0
+----------------------------------------------------------------------
+BLOCK 15: C2f
+----------------------------------------------------------------------
+Layer 15 [C2f] Parameters: 0
+    cv1 [Conv] Parameters: 0
+        conv [Conv2d] Parameters: 12,288
+        bn [BatchNorm2d] Parameters: 128
+        act [SiLU] Parameters: 0
+    cv2 [Conv] Parameters: 0
+        conv [Conv2d] Parameters: 6,144
+        bn [BatchNorm2d] Parameters: 128
+    m [ModuleList] Parameters: 0
+        0 [Bottleneck] Parameters: 0
+            cv1 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 9,216
+                bn [BatchNorm2d] Parameters: 64
+            cv2 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 9,216
+                bn [BatchNorm2d] Parameters: 64
+----------------------------------------------------------------------
+BLOCK 16: Conv
+----------------------------------------------------------------------
+Layer 16 [Conv] Parameters: 0
+    conv [Conv2d] Parameters: 36,864
+    bn [BatchNorm2d] Parameters: 128
+    act [SiLU] Parameters: 0
+----------------------------------------------------------------------
+BLOCK 17: Concat
+----------------------------------------------------------------------
+Layer 17 [Concat] Parameters: 0
+----------------------------------------------------------------------
+BLOCK 18: C2f
+----------------------------------------------------------------------
+Layer 18 [C2f] Parameters: 0
+    cv1 [Conv] Parameters: 0
+        conv [Conv2d] Parameters: 24,576
+        bn [BatchNorm2d] Parameters: 256
+        act [SiLU] Parameters: 0
+    cv2 [Conv] Parameters: 0
+        conv [Conv2d] Parameters: 24,576
+        bn [BatchNorm2d] Parameters: 256
+    m [ModuleList] Parameters: 0
+        0 [Bottleneck] Parameters: 0
+            cv1 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 36,864
+                bn [BatchNorm2d] Parameters: 128
+            cv2 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 36,864
+                bn [BatchNorm2d] Parameters: 128
+----------------------------------------------------------------------
+BLOCK 19: Conv
+----------------------------------------------------------------------
+Layer 19 [Conv] Parameters: 0
+    conv [Conv2d] Parameters: 147,456
+    bn [BatchNorm2d] Parameters: 256
+    act [SiLU] Parameters: 0
+----------------------------------------------------------------------
+BLOCK 20: Concat
+----------------------------------------------------------------------
+Layer 20 [Concat] Parameters: 0
+----------------------------------------------------------------------
+BLOCK 21: C2f
+----------------------------------------------------------------------
+Layer 21 [C2f] Parameters: 0
+    cv1 [Conv] Parameters: 0
+        conv [Conv2d] Parameters: 98,304
+        bn [BatchNorm2d] Parameters: 512
+        act [SiLU] Parameters: 0
+    cv2 [Conv] Parameters: 0
+        conv [Conv2d] Parameters: 98,304
+        bn [BatchNorm2d] Parameters: 512
+    m [ModuleList] Parameters: 0
+        0 [Bottleneck] Parameters: 0
+            cv1 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 147,456
+                bn [BatchNorm2d] Parameters: 256
+            cv2 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 147,456
+                bn [BatchNorm2d] Parameters: 256
+----------------------------------------------------------------------
+BLOCK 22: Segment
+----------------------------------------------------------------------
+Layer 22 [Segment] Parameters: 0
+    cv2 [ModuleList] Parameters: 0
+        0 [Sequential] Parameters: 0
+            0 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 36,864
+                bn [BatchNorm2d] Parameters: 128
+                act [SiLU] Parameters: 0
+            1 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 36,864
+                bn [BatchNorm2d] Parameters: 128
+            2 [Conv2d] Parameters: 4,160
+        1 [Sequential] Parameters: 0
+            0 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 73,728
+                bn [BatchNorm2d] Parameters: 128
+            1 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 36,864
+                bn [BatchNorm2d] Parameters: 128
+            2 [Conv2d] Parameters: 4,160
+        2 [Sequential] Parameters: 0
+            0 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 147,456
+                bn [BatchNorm2d] Parameters: 128
+            1 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 36,864
+                bn [BatchNorm2d] Parameters: 128
+            2 [Conv2d] Parameters: 4,160
+    cv3 [ModuleList] Parameters: 0
+        0 [Sequential] Parameters: 0
+            0 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 46,080
+                bn [BatchNorm2d] Parameters: 160
+                act [SiLU] Parameters: 0
+            1 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 57,600
+                bn [BatchNorm2d] Parameters: 160
+            2 [Conv2d] Parameters: 162
+        1 [Sequential] Parameters: 0
+            0 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 92,160
+                bn [BatchNorm2d] Parameters: 160
+            1 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 57,600
+                bn [BatchNorm2d] Parameters: 160
+            2 [Conv2d] Parameters: 162
+        2 [Sequential] Parameters: 0
+            0 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 184,320
+                bn [BatchNorm2d] Parameters: 160
+            1 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 57,600
+                bn [BatchNorm2d] Parameters: 160
+            2 [Conv2d] Parameters: 162
+    dfl [DFL] Parameters: 0
+        conv [Conv2d] Parameters: 16
+    proto [Proto] Parameters: 0
+        cv1 [Conv] Parameters: 0
+            conv [Conv2d] Parameters: 36,864
+            bn [BatchNorm2d] Parameters: 128
+        upsample [ConvTranspose2d] Parameters: 16,448
+        cv2 [Conv] Parameters: 0
+            conv [Conv2d] Parameters: 36,864
+            bn [BatchNorm2d] Parameters: 128
+        cv3 [Conv] Parameters: 0
+            conv [Conv2d] Parameters: 2,048
+            bn [BatchNorm2d] Parameters: 64
+    cv4 [ModuleList] Parameters: 0
+        0 [Sequential] Parameters: 0
+            0 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 18,432
+                bn [BatchNorm2d] Parameters: 64
+            1 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 9,216
+                bn [BatchNorm2d] Parameters: 64
+            2 [Conv2d] Parameters: 1,056
+        1 [Sequential] Parameters: 0
+            0 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 36,864
+                bn [BatchNorm2d] Parameters: 64
+            1 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 9,216
+                bn [BatchNorm2d] Parameters: 64
+            2 [Conv2d] Parameters: 1,056
+        2 [Sequential] Parameters: 0
+            0 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 73,728
+                bn [BatchNorm2d] Parameters: 64
+            1 [Conv] Parameters: 0
+                conv [Conv2d] Parameters: 9,216
+                bn [BatchNorm2d] Parameters: 64
+            2 [Conv2d] Parameters: 1,056

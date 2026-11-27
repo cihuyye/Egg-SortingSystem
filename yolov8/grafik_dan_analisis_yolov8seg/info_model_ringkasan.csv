@@ -1,0 +1,11 @@
+Item,Nilai
+Nama file model,best.pt
+Arsitektur dasar,YOLOv8n-seg (Instance Segmentation)
+Ukuran file (MB),6.72
+Tugas,segment
+Ukuran input,640 x 640
+Jumlah kelas aktif,2
+Jumlah blok utama,23
+Jumlah modul total,262
+Total parameter,"3,391,014"
+GFLOPs,12.04

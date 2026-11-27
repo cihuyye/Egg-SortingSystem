@@ -1,0 +1,4 @@
+Kanal,Mean Sebelum,Std Sebelum,Mean Sesudah Norm (x_hat),Std Sesudah Norm (x_hat),Gamma (scale),Beta (shift),Mean Akhir (y),Std Akhir (y)
+0,4.8976,3.4416,0.0,1.0,1.5,0.2,0.2,1.5
+1,-2.5623,0.8134,-0.0,1.0,0.7,-0.3,-0.3,0.7
+2,12.2299,6.0872,-0.0,1.0,2.0,0.5,0.5,2.0

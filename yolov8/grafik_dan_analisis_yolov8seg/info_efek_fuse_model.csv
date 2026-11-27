@@ -1,0 +1,3 @@
+Kondisi Model,Jumlah Conv2d,Jumlah BatchNorm2d,Total Parameter
+Sebelum Fuse (Saat Training),76,66,3391014
+Sesudah Fuse (Saat Predict / Export),76,0,3385366

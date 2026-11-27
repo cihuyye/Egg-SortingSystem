@@ -1,0 +1,18 @@
+Jenis modul,Jumlah
+Conv2d,76
+BatchNorm2d,66
+Conv,66
+ModuleList,11
+Sequential,10
+Bottleneck,10
+C2f,8
+Concat,4
+SiLU,2
+Upsample,2
+SegmentationModel,1
+MaxPool2d,1
+SPPF,1
+Segment,1
+DFL,1
+Proto,1
+ConvTranspose2d,1

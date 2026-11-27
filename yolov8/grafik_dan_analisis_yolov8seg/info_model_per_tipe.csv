@@ -1,0 +1,7 @@
+Tipe,Jumlah,Parameter
+Conv2d,76,3363270
+ConvTranspose2d,1,16448
+BatchNorm2d,66,11296
+Concat,4,0
+SiLU,66,0
+Upsample,2,0
