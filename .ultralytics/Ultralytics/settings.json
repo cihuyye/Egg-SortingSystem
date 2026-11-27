@@ -1,0 +1,19 @@
+{
+  "settings_version": "0.0.8",
+  "datasets_dir": "C:\\laragon\\www\\datasets",
+  "weights_dir": "C:\\laragon\\www\\Egg-SortingSystem\\weights",
+  "runs_dir": "C:\\laragon\\www\\Egg-SortingSystem\\runs",
+  "uuid": "7376bbf69e790eb9fae91cdff1eb9a8b91d6ea61d08bdb25c03b1027dd68e17d",
+  "sync": true,
+  "api_key": "",
+  "openai_api_key": "",
+  "clearml": true,
+  "comet": true,
+  "dvc": true,
+  "mlflow": true,
+  "raytune": true,
+  "tensorboard": false,
+  "wandb": false,
+  "vscode_msg": true,
+  "openvino_msg": true
+}
